@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import sys
+import time
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -152,41 +153,60 @@ def split_recap(text: str) -> tuple[str, str]:
     return title[:120], body[:3000]
 
 
-def write_recap(facts: dict, token: str, session: requests.Session | None = None) -> tuple[str, str, str]:
-    """-> (model, headline, body). Tries each model in turn."""
+BUSY = {429, 500, 502, 503, 504}  # worth another try in a moment
+RETRY_WAITS = (5, 20)  # seconds before each retry of a busy model
+
+
+def _error_text(resp) -> str:
+    """The API's own error message if it sent one, kept short."""
+    try:
+        data = resp.json()
+        data = data[0] if isinstance(data, list) else data
+        message = data["error"]["message"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        message = resp.text
+    return " ".join(str(message).split())[:100]
+
+
+def write_recap(facts: dict, token: str, session: requests.Session | None = None, sleep=time.sleep) -> tuple[str, str, str]:
+    """-> (model, headline, body). Tries each model in turn, retrying busy ones."""
     session = session or requests.Session()
     problems = []
     for model in MODELS:
-        try:
-            resp = session.post(
-                ENDPOINT,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": "This week's facts:\n" + json.dumps(facts, ensure_ascii=False, indent=1)},
-                    ],
-                    "temperature": 0.9,
-                    "max_tokens": 4000,  # room for the model's thinking as well as the recap
-                },
-                timeout=90,
-            )
-        except requests.RequestException as exc:
-            problems.append(f"{model}: {type(exc).__name__}")
-            continue
-        if not resp.ok:
-            problems.append(f"{model}: HTTP {resp.status_code} {resp.text[:160]}")
-            continue
-        try:
-            content = resp.json()["choices"][0]["message"]["content"] or ""
-            title, body = split_recap(content)
-        except (KeyError, IndexError, ValueError, RecapUnavailable) as exc:
-            where = f" from {resp.url}" if getattr(resp, "url", ENDPOINT) != ENDPOINT else ""
-            kind = getattr(resp, "headers", {}).get("content-type", "?")
-            problems.append(f"{model}: unusable reply{where} ({type(exc).__name__}: {exc}; {kind}: {resp.text[:120]!r})")
-            continue
-        return model, title, body
+        for attempt in range(len(RETRY_WAITS) + 1):
+            try:
+                resp = session.post(
+                    ENDPOINT,
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": "This week's facts:\n" + json.dumps(facts, ensure_ascii=False, indent=1)},
+                        ],
+                        "temperature": 0.9,
+                        "max_tokens": 4000,  # room for the model's thinking as well as the recap
+                    },
+                    timeout=90,
+                )
+            except requests.RequestException as exc:
+                problem = f"{model}: {type(exc).__name__}"
+                busy = True
+            else:
+                if resp.ok:
+                    try:
+                        content = resp.json()["choices"][0]["message"]["content"] or ""
+                        title, body = split_recap(content)
+                    except (KeyError, IndexError, ValueError, RecapUnavailable) as exc:
+                        problems.append(f"{model}: unusable reply ({type(exc).__name__}: {str(exc)[:60]}; {resp.text[:60]!r})")
+                        break
+                    return model, title, body
+                problem = f"{model}: HTTP {resp.status_code} {_error_text(resp)}"
+                busy = resp.status_code in BUSY
+            if not busy or attempt == len(RETRY_WAITS):
+                problems.append(problem)
+                break
+            sleep(RETRY_WAITS[attempt])
     raise RecapUnavailable("; ".join(problems) or "no models to try")
 
 
@@ -240,7 +260,7 @@ def run_recaps(db: Database, now: datetime, token: str | None, session: requests
             model, title, body = write_recap(facts, token, session)
         except RecapUnavailable as exc:
             log.warning("Recap for %s failed: %s", league["name"], exc)
-            failed.append(f"{league['name']}: {str(exc)[:200]}")
+            failed.append(f"{league['name']}: {exc}")
             continue
         db.upsert(
             "recaps",

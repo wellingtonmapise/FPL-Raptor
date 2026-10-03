@@ -77,16 +77,18 @@ class FakeSession:
         self.calls.append(json["model"])
         answer = self.answers.get(json["model"], 404)
         if isinstance(answer, int):
-            return FakeResponse(answer, text='{"error": "nope"}')
+            return FakeResponse(answer, payload=[{"error": {"code": answer, "message": "nope"}}], text="nope")
         return FakeResponse(200, {"choices": [{"message": {"content": answer}}]})
 
 
-def test_write_recap_falls_back_to_the_next_model():
-    session = FakeSession({"gemini-flash-latest": 429, "gemini-2.5-flash": "Big Week\n\nWords."})
-    assert write_recap({"x": 1}, "token", session) == ("gemini-2.5-flash", "Big Week", "Words.")
-    assert session.calls == ["gemini-flash-latest", "gemini-2.5-flash"]
-    with pytest.raises(RecapUnavailable, match="HTTP 429"):
-        write_recap({"x": 1}, "token", FakeSession({"gemini-flash-latest": 429}))
+def test_write_recap_retries_busy_models_then_falls_back():
+    waits = []
+    session = FakeSession({"gemini-flash-latest": 503, "gemini-2.5-flash": "Big Week\n\nWords."})
+    assert write_recap({"x": 1}, "token", session, sleep=waits.append) == ("gemini-2.5-flash", "Big Week", "Words.")
+    assert session.calls == ["gemini-flash-latest"] * 3 + ["gemini-2.5-flash"]  # two retries, then the next model
+    assert waits == [5, 20]
+    with pytest.raises(RecapUnavailable, match="HTTP 400 nope"):
+        write_recap({"x": 1}, "token", FakeSession({"gemini-flash-latest": 400}), sleep=waits.append)
 
 
 def seed(fake_db):
