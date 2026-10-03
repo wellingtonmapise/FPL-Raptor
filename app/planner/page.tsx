@@ -2,7 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { formatPrice, POSITIONS } from "@/lib/fpl";
-import { gameweekRange, headline, WORTHWHILE_GAIN, type PlanPlayer, type TransferPlanRow } from "@/lib/plan";
+import {
+  adviceText,
+  chipLabel,
+  chipOptions,
+  gameweekRange,
+  headline,
+  laterChips,
+  WORTHWHILE_GAIN,
+  type ChipOption,
+  type PlanPlayer,
+  type TransferPlanRow,
+} from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Transfer plan · FPL Raptor" };
@@ -23,6 +34,71 @@ function Card({ title, note, children }: { title?: string; note?: string; childr
 
 const names = (players: PlanPlayer[]) => players.map((p) => p.name).join(", ");
 const sign = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
+
+const CHIP_BADGE =
+  "inline-block rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200";
+const ADVICE_STYLE: Record<ChipOption["advice"], string> = {
+  play: "text-violet-700 dark:text-violet-300 font-semibold",
+  later: "text-zinc-700 dark:text-zinc-300",
+  save: "text-zinc-500",
+};
+
+function ChipsCard({ row }: { row: TransferPlanRow }) {
+  const options = chipOptions(row);
+  if (!options.length) {
+    return (
+      <Card title="Chips">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">No chips left to play in {gameweekRange(row)}.</p>
+      </Card>
+    );
+  }
+  const weeks = Object.keys(options[0].by_week).sort((a, b) => Number(a) - Number(b));
+  return (
+    <Card title="Chips" note="xP gained if played that week">
+      <div className="-mx-1 overflow-x-auto">
+        <table className="w-full min-w-[20rem] text-sm">
+          <thead>
+            <tr className="text-xs text-zinc-500">
+              <th className="px-1 pb-2 text-left font-normal">Chip</th>
+              {weeks.map((g) => (
+                <th key={g} className="px-1 pb-2 text-right font-normal">
+                  GW{g}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {options.map((o) => (
+              <tr key={`${o.chip}-${o.expires}`} className="border-t border-zinc-100 dark:border-zinc-900">
+                <td className="px-1 py-2">
+                  <div className="font-medium">{o.label}</div>
+                  <div className={`text-xs ${ADVICE_STYLE[o.advice]}`}>{adviceText(o, row)}</div>
+                </td>
+                {weeks.map((g) => {
+                  const v = o.by_week[g];
+                  const picked = o.advice !== "save" && String(o.best_week) === g;
+                  return (
+                    <td
+                      key={g}
+                      className={`px-1 py-2 text-right tabular-nums ${picked ? "font-semibold text-violet-700 dark:text-violet-300" : "text-zinc-600 dark:text-zinc-400"}`}
+                    >
+                      {v === undefined ? "–" : sign(v)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">
+        Each chip is tried in every week and compared with the plan without chips. It&apos;s only played when the gain
+        beats what a good week for that chip is usually worth, unless it&apos;s about to expire. A Wildcard&apos;s value
+        beyond these four weeks isn&apos;t counted, so treat its numbers as a floor.
+      </p>
+    </Card>
+  );
+}
 
 export default async function PlannerPage() {
   const supabase = await createClient();
@@ -63,12 +139,29 @@ export default async function PlannerPage() {
       </header>
 
       <Card title={`Before the GW${data.from_gameweek} deadline`}>
-        {top.kind === "move" ? (
+        {top.chip && (
+          <p className={`mb-2 ${CHIP_BADGE}`}>
+            Play {top.chip.label}
+            {top.chip.captain ? ` on ${top.chip.captain}` : ""} this week
+          </p>
+        )}
+        {top.kind === "squad-chip" ? (
+          <>
+            <p className="text-lg font-semibold">
+              {top.chip.label}: {top.changes} change{top.changes === 1 ? "" : "s"}
+            </p>
+            <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+              {sign(gain)} expected points over {gameweekRange(data)} compared with keeping your team.
+              {top.chip.id === "freehit" ? " Your squad comes back the week after." : ""}
+            </p>
+          </>
+        ) : top.kind === "move" ? (
           <>
             <p className="text-lg font-semibold">{top.moves}</p>
             <p className="mt-1 text-zinc-600 dark:text-zinc-400">
               {top.hits > 0 ? `Worth a −${4 * top.hits} hit: ` : ""}
-              {sign(gain)} expected points over {gameweekRange(data)} compared with keeping your team.
+              {sign(gain)} expected points over {gameweekRange(data)} compared with keeping your team
+              {laterChips(data) ? `, including ${laterChips(data)}` : ""}.
             </p>
           </>
         ) : (
@@ -92,12 +185,19 @@ export default async function PlannerPage() {
         </dl>
       </Card>
 
+      <ChipsCard row={data} />
+
       {weeks.map((w) => (
         <Card
           key={w.gameweek}
-          title={`GW${w.gameweek}`}
-          note={`${w.free_transfers} free transfer${w.free_transfers === 1 ? "" : "s"} · ${w.expected_points.toFixed(1)} xP`}
+          title={`GW${w.gameweek}${w.chip ? ` · ${chipLabel(w.chip)}` : ""}`}
+          note={`${w.chip === "wildcard" || w.chip === "freehit" ? "unlimited transfers" : `${w.free_transfers} free transfer${w.free_transfers === 1 ? "" : "s"}`} · ${w.expected_points.toFixed(1)} xP`}
         >
+          {w.chip === "freehit" && w.transfers.length > 0 && (
+            <p className="mb-2 text-xs text-zinc-500">This week&apos;s team only: your squad returns for GW{w.gameweek + 1}.</p>
+          )}
+          {w.chip === "bboost" && <p className="mb-2 text-xs text-zinc-500">Your bench scores too.</p>}
+          {w.chip === "3xc" && <p className="mb-2 text-xs text-zinc-500">Your captain scores triple.</p>}
           {w.transfers.length === 0 ? (
             <p className="text-sm text-zinc-600 dark:text-zinc-400">No transfers{w.free_transfers < 5 ? " (bank it)" : ""}.</p>
           ) : (

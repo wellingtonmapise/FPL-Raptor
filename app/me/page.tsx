@@ -18,7 +18,7 @@ import {
   type PredictionRow,
   type Team,
 } from "@/lib/gameweek";
-import { gameweekRange, headline, type TransferPlanRow } from "@/lib/plan";
+import { gameweekRange, headline, laterChips, type TransferPlanRow } from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
 
@@ -255,20 +255,30 @@ export default async function MyGameweekPage() {
       )}
 
       {plan && suggestion && (
-        <Card title="Transfer suggestion">
+        <Card title={suggestion.chip ? "Chip and transfers" : "Transfer suggestion"}>
+          {suggestion.chip && (
+            <p className="mb-2 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
+              Play {suggestion.chip.label}
+              {suggestion.chip.captain ? ` on ${suggestion.chip.captain}` : ""} this week
+            </p>
+          )}
           <p className="text-lg font-semibold">
-            {suggestion.kind === "move" ? suggestion.moves : "Roll your transfer"}
+            {suggestion.kind === "move"
+              ? suggestion.moves
+              : suggestion.kind === "squad-chip"
+                ? `${suggestion.chip.label}: ${suggestion.changes} change${suggestion.changes === 1 ? "" : "s"}`
+                : "Roll your transfer"}
           </p>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            {suggestion.kind === "move"
-              ? `${suggestion.hits ? `Worth a −${4 * suggestion.hits} hit. ` : ""}+${suggestion.gain.toFixed(1)} xP over ${gameweekRange(plan)} vs keeping your team.`
-              : `Nothing gains more than a point over ${gameweekRange(plan)}. You have ${plan.free_transfers} free transfer${plan.free_transfers === 1 ? "" : "s"}.`}
+            {suggestion.kind === "roll" && !suggestion.chip
+              ? `Nothing gains more than a point over ${gameweekRange(plan)}. You have ${plan.free_transfers} free transfer${plan.free_transfers === 1 ? "" : "s"}.`
+              : `${suggestion.kind === "move" && suggestion.hits ? `Worth a −${4 * suggestion.hits} hit. ` : ""}+${suggestion.gain.toFixed(1)} xP over ${gameweekRange(plan)} vs keeping your team${laterChips(plan) ? `, including ${laterChips(plan)}` : ""}.`}
           </p>
           <Link
             href="/planner"
             className="mt-3 inline-block text-sm font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
           >
-            See the full plan →
+            See the full plan{plan.plan.chips?.length ? " and chips" : ""} →
           </Link>
         </Card>
       )}

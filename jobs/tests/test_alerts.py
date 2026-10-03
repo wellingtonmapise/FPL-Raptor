@@ -215,3 +215,16 @@ def test_transfer_idea_rolls_small_gains():
 
     row = {"expected_points": 201.5, "baseline_points": 201.2, "plan": {"weeks": [{"transfers": [{"out": {"name": "A"}, "in": {"name": "B"}}]}]}}
     assert transfer_idea(row) == "Plan: roll your transfer."
+
+
+def test_transfer_idea_mentions_this_weeks_chip():
+    from raptor.alerts import transfer_idea
+
+    move = {"out": {"name": "Palmer"}, "in": {"name": "Saka"}}
+    week = {"transfers": [move], "hits": 0, "chip": "bboost", "captain": {"name": "Haaland"}}
+    row = {"expected_points": 230, "baseline_points": 212, "plan": {"weeks": [week]}}
+    assert transfer_idea(row) == "Plan: Bench Boost this week; Palmer → Saka, +18.0 xP."
+    week.update(chip="3xc", transfers=[])
+    assert transfer_idea(row) == "Plan: Triple Captain Haaland this week; roll your transfer."
+    week.update(chip="wildcard", transfers=[move] * 9)
+    assert transfer_idea(row) == "Plan: play your Wildcard (9 changes), +18.0 xP."

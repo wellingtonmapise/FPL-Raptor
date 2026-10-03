@@ -130,16 +130,28 @@ def price_message(changes: list[tuple[dict, int, int]]) -> dict:
     }
 
 
+CHIP_LABELS = {"wildcard": "Wildcard", "freehit": "Free Hit", "bboost": "Bench Boost", "3xc": "Triple Captain"}
+
+
 def transfer_idea(plan_row: dict) -> str:
-    """One line from a saved transfer plan: the first week's moves, or roll."""
+    """One line from a saved transfer plan: this week's chip and moves, or roll."""
     gain = float(plan_row["expected_points"]) - float(plan_row["baseline_points"])
     weeks = (plan_row.get("plan") or {}).get("weeks") or []
-    moves = weeks[0].get("transfers", []) if weeks else []
+    first = weeks[0] if weeks else {}
+    moves = first.get("transfers", [])
+    chip = first.get("chip")
+    if chip in ("wildcard", "freehit"):
+        return f"Plan: play your {CHIP_LABELS[chip]} ({len(moves)} changes), +{gain:.1f} xP."
+    lead = ""
+    if chip == "3xc":
+        lead = f"Triple Captain {first['captain']['name']} this week; "
+    elif chip:
+        lead = f"{CHIP_LABELS[chip]} this week; "
     if not moves or gain < 1:
-        return "Plan: roll your transfer."
+        return f"Plan: {lead}roll your transfer."
     text = ", ".join(f"{m['out']['name']} → {m['in']['name']}" for m in moves)
-    hits = weeks[0].get("hits") or 0
-    return f"Plan: {text}" + (f" (−{4 * hits})" if hits else "") + f", +{gain:.1f} xP."
+    hits = first.get("hits") or 0
+    return f"Plan: {lead}{text}" + (f" (−{4 * hits})" if hits else "") + f", +{gain:.1f} xP."
 
 
 def first_name(full: str) -> str:

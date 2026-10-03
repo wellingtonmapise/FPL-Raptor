@@ -3,9 +3,10 @@
     uv run python -m raptor.optimizer.run
 
 Runs after the predictions. For each user with a team: reads their latest
-squad, works out free transfers, bank and selling prices from public FPL
-data, and solves a 4-gameweek plan with the model's expected points. Saves
-it to transfer_plans, alongside the "no transfers" baseline.
+squad, works out free transfers, bank, selling prices and unused chips from
+public FPL data, and solves a 4-gameweek plan with the model's expected
+points, placing chips where they're worth it (chips.py). Saves it to
+transfer_plans, alongside the "no transfers" baseline.
 """
 
 from __future__ import annotations
@@ -18,8 +19,9 @@ from raptor.config import load_settings
 from raptor.db import Database, SupabaseError
 from raptor.fpl import FplClient, FplUnavailable
 from raptor.model.predict import load_model
+from raptor.optimizer.chips import ChipOption, ChipPlan, available_chips, chip_windows, plan_with_chips
 from raptor.optimizer.inputs import bank, free_transfers, purchase_prices, selling_price
-from raptor.optimizer.solve import Plan, Player, candidate_pool, solve
+from raptor.optimizer.solve import CHIP_LABELS, Plan, Player, candidate_pool
 from raptor.run import announce, utc_now
 
 log = logging.getLogger("raptor.plans")
@@ -50,7 +52,19 @@ def current_squad(db: Database, fpl: FplClient, team_id: int, gameweek_id: int) 
     return {p["element"] for p in (live or {}).get("picks", [])}
 
 
-def plan_json(plan: Plan, xp: dict[tuple[int, int], float]) -> dict:
+def chip_json(option: ChipOption) -> dict:
+    return {
+        "chip": option.chip,
+        "label": option.label,
+        "advice": option.advice,
+        "best_week": option.best_week,
+        "gain": round(option.gain, 2),
+        "by_week": {str(g): round(v, 2) for g, v in sorted(option.by_week.items())},
+        "expires": option.expires,
+    }
+
+
+def plan_json(plan: Plan, xp: dict[tuple[int, int], float], chips: ChipPlan | None = None) -> dict:
     def player(p: Player, g: int | None = None, sell: bool = False) -> dict:
         out = {"id": p.id, "name": p.name, "position": p.position, "team": p.team, "price": p.price}
         if sell:
@@ -73,14 +87,17 @@ def plan_json(plan: Plan, xp: dict[tuple[int, int], float]) -> dict:
                 "bench": [player(p, w.gameweek) for p in w.bench],
                 "expected_points": round(w.expected_points, 2),
                 "bank_after": w.bank_after,
+                "chip": w.chip,
             }
             for w in plan.weeks
         ],
+        "chips": [chip_json(o) for o in (chips.options if chips else [])],
+        "no_chip_points": round(chips.base.expected_points, 2) if chips and chips.base else None,
     }
 
 
 def plan_for_team(fpl: FplClient, db: Database, team_id: int, bootstrap: dict, current_gw: int,
-                  gameweeks: list[int], xp: dict[tuple[int, int], float]) -> tuple[Plan, int, int]:
+                  gameweeks: list[int], xp: dict[tuple[int, int], float]) -> tuple[ChipPlan, int, int]:
     history = fpl.entry_history(team_id) or {}
     transfers = fpl.entry_transfers(team_id)
     squad = current_squad(db, fpl, team_id, current_gw)
@@ -101,15 +118,19 @@ def plan_for_team(fpl: FplClient, db: Database, team_id: int, bootstrap: dict, c
     ]
     ft, money = free_transfers(history), bank(history)
     pool = candidate_pool(players, squad, xp, gameweeks)
-    return solve(pool, squad, xp, gameweeks, bank=money, free_transfers=ft), ft, money
+    chips = available_chips(history, chip_windows(bootstrap), gameweeks)
+    return plan_with_chips(pool, squad, xp, gameweeks, money, ft, chips), ft, money
 
 
 def describe_first_week(plan: Plan) -> str:
     first = plan.weeks[0]
+    chip = f"{CHIP_LABELS[first.chip]}: " if first.chip else ""
     if not first.transfers:
-        return "roll"
-    moves = ", ".join(f"{o.name}→{i.name}" for o, i in first.transfers)
-    return moves + (f" (−{4 * first.hits})" if first.hits else "")
+        return chip + "roll" if not chip else chip.rstrip(": ")
+    moves = ", ".join(f"{o.name}→{i.name}" for o, i in first.transfers[:4])
+    if len(first.transfers) > 4:
+        moves += f" +{len(first.transfers) - 4} more"
+    return chip + moves + (f" (−{4 * first.hits})" if first.hits else "")
 
 
 def run_plans(fpl: FplClient, db: Database, now: datetime) -> str:
@@ -132,7 +153,8 @@ def run_plans(fpl: FplClient, db: Database, now: datetime) -> str:
     for profile in profiles:
         team = profile["fpl_team_id"]
         try:
-            plan, ft, money = plan_for_team(fpl, db, team, bootstrap, current["id"], upcoming, xp)
+            chips, ft, money = plan_for_team(fpl, db, team, bootstrap, current["id"], upcoming, xp)
+            plan = chips.plan
         except FplUnavailable:
             raise
         except Exception as exc:  # one bad team shouldn't stop the rest
@@ -146,7 +168,7 @@ def run_plans(fpl: FplClient, db: Database, now: datetime) -> str:
             "horizon": len(upcoming),
             "free_transfers": ft,
             "bank": money,
-            "plan": plan_json(plan, xp),
+            "plan": plan_json(plan, xp, chips),
             "expected_points": round(plan.expected_points, 2),
             "baseline_points": round(plan.baseline_points, 2),
             "model_version": meta["version"],
@@ -158,7 +180,11 @@ def run_plans(fpl: FplClient, db: Database, now: datetime) -> str:
             if "PGRST205" in str(exc) or ("transfer_plans" in str(exc) and "does not exist" in str(exc)):
                 return f"plans skipped (run {MIGRATION})"
             raise
-        done.append(f"{team}: {describe_first_week(plan)}, +{plan.gain:.1f} over GW{upcoming[0]}-{upcoming[-1]}")
+        later = ", ".join(f"{CHIP_LABELS[c]} GW{g}" for g, c in sorted(chips.chips.items()) if g != upcoming[0])
+        done.append(
+            f"{team}: {describe_first_week(plan)}, +{plan.gain:.1f} over GW{upcoming[0]}-{upcoming[-1]}"
+            + (f" ({later})" if later else "")
+        )
 
     summary = f"{len(done)} plan{'s' if len(done) != 1 else ''}"
     if done:

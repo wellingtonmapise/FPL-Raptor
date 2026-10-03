@@ -212,4 +212,26 @@ describe("transfer plan headline", () => {
     expect(headline(row([week([{ out: player(5, "Palmer"), in: player(6, "Saka") }])], 201.6, 201.2)).kind).toBe("roll");
     expect(headline(row([week([])], 201.2, 201.2)).kind).toBe("roll");
   });
+
+  it("leads with this week's chip", async () => {
+    const { headline } = await import("@/lib/plan");
+    const tc = { ...week([]), chip: "3xc" };
+    expect(headline(row([tc], 215, 201.2))).toEqual({
+      kind: "roll", gain: expect.closeTo(13.8, 5), chip: { id: "3xc", label: "Triple Captain", captain: "Haaland" },
+    });
+    const wc = { ...week([{ out: player(5, "Palmer"), in: player(6, "Saka") }, { out: player(7, "A"), in: player(8, "B") }]), chip: "wildcard" };
+    expect(headline(row([wc], 230, 201.2))).toMatchObject({ kind: "squad-chip", changes: 2, chip: { label: "Wildcard" } });
+  });
+
+  it("orders chips play, later, save and explains each", async () => {
+    const { adviceText, chipOptions } = await import("@/lib/plan");
+    const opt = (chip: string, advice: "play" | "later" | "save", best: number, expires = 19) => ({
+      chip, label: chip, advice, best_week: best, gain: 5, by_week: { "6": 1, "7": 5 }, expires,
+    });
+    const r = { ...row([week([])], 200, 200), plan: { weeks: [week([])], chips: [opt("3xc", "save", 7), opt("bboost", "later", 8), opt("freehit", "play", 6), opt("wildcard", "save", 6, 8)] } };
+    expect(chipOptions(r).map((o) => o.chip)).toEqual(["freehit", "bboost", "wildcard", "3xc"]);
+    expect(chipOptions(r).map((o) => adviceText(o, r))).toEqual([
+      "Play this week", "Pencilled in for GW8", "Save it (use by GW8)", "Save it",
+    ]);
+  });
 });
