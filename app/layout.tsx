@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
 
 // Fonts come from the geist package (bundled files), so builds never depend on
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SiteHeader />
+        {children}
+      </body>
     </html>
   );
 }

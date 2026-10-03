@@ -14,4 +14,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The database schema lives in `supabase/migrations/`. Add new migrations as new files; don't edit applied ones.
 - FPL money is tenths of a million (`65` = £6.5m). Every FPL API call goes through `jobs/raptor/fpl.py`.
 - The web app reads Supabase with the publishable key only (row-level security applies). The secret key is for jobs in GitHub Actions and must never appear in app code.
-- Checks: `npm run lint && npm run build` for the app; `cd jobs && uv run pytest` for the jobs.
+- Signed-in pages use `lib/supabase/server.ts` (cookie session); public pages use `lib/supabase/public.ts` so they stay static. `proxy.ts` refreshes sessions.
+- Pure data-shaping logic lives in `lib/` with Vitest tests (`lib/*.test.ts`).
+- Checks: `npm run lint && npm test && npm run build` for the app; `cd jobs && uv run pytest` for the jobs.

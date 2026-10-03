@@ -1,5 +1,6 @@
+import Link from "next/link";
 import Countdown from "@/components/Countdown";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase/public";
 
 // Rebuild this page at most every 5 minutes; the jobs only update every few hours.
 export const revalidate = 300;
@@ -71,9 +72,9 @@ export default async function Home() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-10">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">FPL Raptor</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Your gameweek, sorted.</h1>
         <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-          Your gameweek and your mini-league, sorted.
+          Deadlines, flags on your players and your mini-league, in one place.
         </p>
       </header>
 
@@ -116,6 +117,15 @@ export default async function Home() {
           </p>
           <Countdown deadline={data.next.deadline_time} />
         </section>
+      )}
+
+      {data.state === "ok" && (
+        <Link
+          href="/me"
+          className="rounded-lg bg-emerald-600 px-4 py-3 text-center font-medium text-white hover:bg-emerald-700"
+        >
+          Open my gameweek
+        </Link>
       )}
 
       {data.state === "ok" && data.lastRun?.finished_at && (
