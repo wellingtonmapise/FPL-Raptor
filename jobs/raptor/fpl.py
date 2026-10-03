@@ -87,10 +87,10 @@ class FplClient:
             raise FplUnavailable("fixtures/ returned 404")
         return data
 
-    def league_standings(self, league_id: int) -> dict | None:
+    def league_standings(self, league_id: int, max_pages: int | None = None) -> dict | None:
         """All pages of a classic league's standings, merged into one response.
 
-        Returns None if the league doesn't exist.
+        Returns None if the league doesn't exist. `max_pages` stops early (50 a page).
         """
         page = 1
         first: dict | None = None
@@ -106,7 +106,7 @@ class FplClient:
                 first = data
             standings = data.get("standings", {})
             results.extend(standings.get("results", []))
-            if not standings.get("has_next"):
+            if not standings.get("has_next") or (max_pages and page >= max_pages):
                 break
             page += 1
             time.sleep(self.polite_delay_seconds)

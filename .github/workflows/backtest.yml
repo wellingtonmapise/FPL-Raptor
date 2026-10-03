@@ -1,12 +1,13 @@
 name: Season backtest data
 
-# Manual only: fetches the followed league's results from last season, which
-# the season backtest (jobs/raptor/backtest) compares against.
+# Manual only: fetches last season's results that the season backtest
+# (jobs/raptor/backtest) compares against. League: a league id, or "curve"
+# for a sample of (points, rank) pairs across the whole game.
 on:
   workflow_dispatch:
     inputs:
       league:
-        description: League id
+        description: League id, or curve
         default: "1086012"
       season:
         description: Season, as FPL names it
@@ -18,7 +19,7 @@ permissions:
 jobs:
   actuals:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: jobs
