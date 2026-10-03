@@ -167,6 +167,12 @@ export default async function MyGameweekPage() {
             {next.name} deadline
           </p>
           <Countdown deadline={next.deadline_time} />
+          <Link
+            href="/notifications"
+            className="mt-3 inline-block text-sm font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
+          >
+            Remind me before the deadline →
+          </Link>
         </Card>
       )}
 
@@ -242,9 +248,14 @@ export default async function MyGameweekPage() {
       )}
 
       <div className="flex items-center justify-between text-sm">
-        <Link href="/onboarding" className="text-zinc-500 underline-offset-4 hover:underline">
-          Change team (ID {teamId})
-        </Link>
+        <div className="flex gap-4">
+          <Link href="/notifications" className="text-zinc-500 underline-offset-4 hover:underline">
+            Notifications
+          </Link>
+          <Link href="/onboarding" className="text-zinc-500 underline-offset-4 hover:underline">
+            Change team
+          </Link>
+        </div>
         <form action={signOut}>
           <button type="submit" className="text-zinc-500 underline-offset-4 hover:underline">
             Sign out

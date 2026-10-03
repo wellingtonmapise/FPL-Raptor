@@ -2,21 +2,22 @@
 
 A free, installable web app for Fantasy Premier League: deadline countdowns, alerts about your players, transfer ideas, and a mini-league page built for banter with friends.
 
-Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, and a My gameweek page. Later phases (notifications, league page, points model, transfer optimizer) build on top of it.
+Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, and push notifications on an installable app. Later phases (league page, points model, transfer optimizer) build on top of it.
 
 ## What's in here
 
 ```
 FPL-Raptor/
-├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek)
-├── components/              Countdown, squad list, site header
+├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /notifications
+├── components/              Countdown, squad list, site header, install help
+├── public/                  sw.js (shows notifications) and app icons
 ├── lib/                     Supabase clients, FPL helpers, squad logic (+ Vitest tests)
 ├── proxy.ts                 Refreshes the sign-in session on every request
 ├── jobs/                    Python: the scheduled FPL -> Supabase fetch
-│   ├── raptor/              fpl.py (API + parsing), db.py, changes.py, run.py
+│   ├── raptor/              fpl.py (API + parsing), db.py, changes.py, run.py (fetch), alerts.py (push)
 │   └── tests/               pytest, using small made-up FPL responses
 ├── supabase/migrations/     SQL that creates every table and its access rules
-└── .github/workflows/       fetch.yml (every 3 hours), ci.yml (tests + build)
+└── .github/workflows/       fetch.yml (every 3 hours), alerts.yml (every 15 minutes), ci.yml (tests + build)
 ```
 
 Everything runs on free tiers: Vercel (web app), Supabase (database and sign-in), GitHub Actions (scheduled jobs).
@@ -52,13 +53,34 @@ From then on it runs every 3 hours on its own. To follow more leagues, add their
 2. Under **Environment Variables**, add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 3. Deploy. The home page shows the next deadline once the first fetch has run.
 
+### 4. Push notifications
+
+Pushes are signed with a VAPID key pair. The public half is in `lib/pushConfig.ts`; the private half is a secret that goes in two places:
+
+1. **GitHub:** add a repository secret `VAPID_PRIVATE_KEY` (same place as the Supabase secrets). The **Send alerts** workflow uses it.
+2. **Vercel:** add an environment variable `VAPID_PRIVATE_KEY` with the same value, then redeploy. The **Send a test notification** button uses it.
+
+To make a new pair: `npx web-push generate-vapid-keys`. Put the private key in both places above and set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in Vercel to the new public key. Everyone then needs to turn notifications on again.
+
 ## Using the app
 
 1. Open the site and tap **My gameweek**, then **Create an account** with an email and password.
 2. Paste your FPL team ID (the number after `/entry/` on your Points page) or the whole Points link.
 3. My gameweek shows your deadline countdown, flagged players with FPL's injury news, last gameweek's points, bank and team value, and your squad with each player's next fixture and its difficulty.
 
+4. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
+
 A new user's team is picked up by the next scheduled fetch. Until then, My gameweek loads their squad straight from FPL.
+
+**What gets sent** (every 15 minutes, each alert once):
+
+| Alert | When |
+| --- | --- |
+| Deadline reminder | Under 24 hours to the deadline, and again under 75 minutes. Lists flagged players in your team and your captain |
+| Team news | A player in your squad gets flagged, their chance of playing or news changes, or they're available again |
+| Price change | A player in your squad rises or falls in price |
+
+Team news and prices come from the fetch, so they arrive within about 3 hours of FPL changing them.
 
 ## Running it on your laptop
 
@@ -92,9 +114,10 @@ uv run --env-file .env python -m raptor.run
 | `leagues`, `league_members` | Standings of followed leagues | Every run |
 | `entry_gameweeks`, `picks` | Each tracked manager's squad, captain, chip, points, bank | Current and previous gameweek, until FPL confirms final points |
 | `profiles` | Each user's FPL team id and name | By the app, at onboarding |
-| `notification_prefs`, `push_subscriptions`, `notifications_sent` | Alert settings and delivery log | By the app (Phase 3) |
+| `notification_prefs`, `push_subscriptions` | Which alerts each user wants; their devices | By the app, on the Notifications page |
+| `notifications_sent` | Every alert sent, so none goes out twice | By the alerts job |
 | `predictions` | Expected points per player per gameweek | By the model (Phase 5) |
-| `job_runs` | One row per fetch, with status and a summary | Every run |
+| `job_runs` | One row per fetch or alerts run, with status and a summary | Every run |
 
 Things worth knowing about FPL's data:
 
@@ -112,8 +135,11 @@ Things worth knowing about FPL's data:
 - **Fetch shows `skipped`:** FPL was down or mid-update (common around deadlines). The next run picks it up.
 - **FPL returns 403 to GitHub Actions:** FPL occasionally blocks cloud servers. Run the job from your laptop to confirm the code works; if the block persists, the fetch can move to another scheduler.
 - **"Account created, but Supabase is waiting for email confirmation":** turn off "Confirm email" (Setup, step 1.4). Accounts created before that can be confirmed by hand in **Authentication → Users**.
+- **"Send a test notification" says VAPID_PRIVATE_KEY is missing:** add it in Vercel (Setup, step 4) and redeploy.
+- **Send alerts shows "Push not set up":** add the `VAPID_PRIVATE_KEY` repository secret on GitHub.
+- **No notifications on iPhone:** the app must be opened from the Home Screen icon (not a Safari tab) when you turn notifications on, and notifications must be allowed in Settings → Notifications → FPL Raptor.
 - **Scheduled runs stopped:** GitHub pauses schedules in public repos after 60 days without a commit. Push anything, or re-enable it under Actions.
 
 ## What's next
 
-Phase 3 of the plan: make the site installable on phones and send push notifications (deadline reminders, flags on your players, price changes).
+Phase 4 of the plan: the league page for BiG ReD (table with movement, everyone's captains, who owns whom, differentials, weekly awards) and social alerts.

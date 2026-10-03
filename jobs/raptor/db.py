@@ -114,6 +114,19 @@ class Database:
         )
         return resp.json() if returning else []
 
+    def delete(self, table: str, filters: dict[str, str]) -> None:
+        if not filters:
+            raise ValueError("delete needs at least one filter")
+        self._check(
+            self.session.delete(
+                f"{self.base}/{table}",
+                params=filters,
+                headers={"Prefer": "return=minimal"},
+                timeout=30,
+            ),
+            f"delete {table}",
+        )
+
     def update(self, table: str, values: dict, filters: dict[str, str]) -> None:
         if not filters:
             raise ValueError("update needs at least one filter")

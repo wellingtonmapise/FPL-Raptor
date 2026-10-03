@@ -1,0 +1,48 @@
+# Sends push notifications every 15 minutes: deadline reminders (24 hours and
+# 1 hour before), team news and price changes for players in each user's squad.
+#
+# Needs repository secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_URL, SUPABASE_SECRET_KEY   same as the fetch
+#   VAPID_PRIVATE_KEY                   the private push key (see README)
+# Until VAPID_PRIVATE_KEY is set, runs finish straight away without sending.
+
+name: Send alerts
+
+on:
+  schedule:
+    # Every 15 minutes, off the top of the hour (GitHub often runs those late).
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-alerts
+  cancel-in-progress: false
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: jobs
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: "https://fpl-raptor.vercel.app"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          working-directory: jobs
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Send due notifications
+        run: uv run --no-dev python -m raptor.alerts

@@ -65,7 +65,8 @@ class FakeFpl:
 class FakeDb:
     """A tiny in-memory version of raptor.db.Database.
 
-    Supports the PostgREST filters the jobs use: eq.X, is.true, not.is.null.
+    Supports the PostgREST filters the jobs use: eq.X, is.true, not.is.null,
+    in.(a,b) and gt.X (timestamps compare correctly as ISO strings).
     """
 
     def __init__(self) -> None:
@@ -87,6 +88,12 @@ class FakeDb:
                     return False
             elif rule == "not.is.null":
                 if value is None:
+                    return False
+            elif rule.startswith("in.(") and rule.endswith(")"):
+                if str(value) not in rule[4:-1].split(","):
+                    return False
+            elif rule.startswith("gt."):
+                if value is None or str(value) <= rule[3:]:
                     return False
             else:
                 raise NotImplementedError(rule)
@@ -120,6 +127,9 @@ class FakeDb:
             self.rows(table).append(stored)
             out.append(stored)
         return out if returning else []
+
+    def delete(self, table, filters):
+        self.tables[table] = [r for r in self.rows(table) if not self._matches(r, filters)]
 
     def update(self, table, values, filters):
         for row in self.rows(table):
