@@ -184,7 +184,9 @@ def write_recap(facts: dict, token: str, session: requests.Session | None = None
             content = resp.json()["choices"][0]["message"]["content"] or ""
             title, body = split_recap(content)
         except (KeyError, IndexError, ValueError, RecapUnavailable) as exc:
-            problems.append(f"{model}: unusable reply ({exc})")
+            where = f" from {resp.url}" if getattr(resp, "url", ENDPOINT) != ENDPOINT else ""
+            kind = getattr(resp, "headers", {}).get("content-type", "?")
+            problems.append(f"{model}: unusable reply{where} ({type(exc).__name__}: {exc}; {kind}: {resp.text[:120]!r})")
             continue
         return model, title, body
     raise RecapUnavailable("; ".join(problems) or "no models to try")
