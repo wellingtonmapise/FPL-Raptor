@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from raptor.db import SupabaseError
-from raptor.recaps import MIGRATION, RecapUnavailable, league_facts, run_recaps, split_recap, write_recap
+from raptor.recaps import MIGRATION, RecapUnavailable, league_facts, rank_models, run_recaps, split_recap, write_recap
 
 NOW = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
 LEAGUE = {"id": 1086012, "name": "BiG ReD"}
@@ -68,10 +68,14 @@ class FakeResponse:
 
 
 class FakeSession:
-    """Answers per model: a status code, or text for a 200."""
+    """Answers per model: a status code, or text for a 200. Lists `models` (default: the answers' keys)."""
 
-    def __init__(self, answers):
+    def __init__(self, answers, models=None):
         self.answers, self.calls = answers, []
+        self.models = list(answers) if models is None else models
+
+    def get(self, url, headers, timeout):
+        return FakeResponse(200, {"data": [{"id": f"models/{m}"} for m in self.models]})
 
     def post(self, url, headers, json, timeout):
         self.calls.append(json["model"])
@@ -81,11 +85,27 @@ class FakeSession:
         return FakeResponse(200, {"choices": [{"message": {"content": answer}}]})
 
 
+def test_rank_models_prefers_current_flash_text_models():
+    ids = ["models/gemini-3-flash", "models/gemini-3.1-flash-lite", "models/gemini-flash-latest", "models/gemini-3.5-flash-preview",
+           "models/gemini-3-pro", "models/gemini-3-flash-image", "models/gemini-3.5-flash", "models/text-embedding-004",
+           "models/gemini-flash-lite-latest"]
+    assert rank_models(ids) == [
+        "gemini-flash-latest", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.5-flash-preview",
+        "gemini-flash-lite-latest", "gemini-3.1-flash-lite",
+    ]
+
+
+def test_write_recap_uses_fallback_aliases_when_the_list_is_unavailable():
+    session = FakeSession({"gemini-flash-lite-latest": "Lite Week\n\nWords."}, models=[])
+    assert write_recap({"x": 1}, "token", session, sleep=lambda s: None) == ("gemini-flash-lite-latest", "Lite Week", "Words.")
+    assert session.calls == ["gemini-flash-latest", "gemini-flash-lite-latest"]
+
+
 def test_write_recap_retries_busy_models_then_falls_back():
     waits = []
-    session = FakeSession({"gemini-flash-latest": 503, "gemini-2.5-flash": "Big Week\n\nWords."})
-    assert write_recap({"x": 1}, "token", session, sleep=waits.append) == ("gemini-2.5-flash", "Big Week", "Words.")
-    assert session.calls == ["gemini-flash-latest"] * 3 + ["gemini-2.5-flash"]  # two retries, then the next model
+    session = FakeSession({"gemini-flash-latest": 503, "gemini-3-flash": "Big Week\n\nWords."})
+    assert write_recap({"x": 1}, "token", session, sleep=waits.append) == ("gemini-3-flash", "Big Week", "Words.")
+    assert session.calls == ["gemini-flash-latest"] * 3 + ["gemini-3-flash"]  # two retries, then the next model
     assert waits == [5, 20]
     with pytest.raises(RecapUnavailable, match="HTTP 400 nope"):
         write_recap({"x": 1}, "token", FakeSession({"gemini-flash-latest": 400}), sleep=waits.append)
@@ -118,13 +138,13 @@ def test_run_waits_for_final_points_and_needs_a_token(fake_db):
     seed(fake_db)
     for e in fake_db.rows("entry_gameweeks")[:2]:
         e["final"] = False
-    assert run_recaps(fake_db, NOW, "token", FakeSession({})) == "waiting for final points in BiG ReD"
+    assert run_recaps(fake_db, NOW, "token", FakeSession({}, models=[])) == "waiting for final points in BiG ReD"
     assert run_recaps(fake_db, NOW, None) == "recaps skipped (no GEMINI_API_KEY secret)"
 
 
 def test_run_reports_model_failures_and_skips_before_the_migration(fake_db):
     seed(fake_db)
-    assert run_recaps(fake_db, NOW, "token", FakeSession({})).startswith("failed: BiG ReD: gemini-flash-latest: HTTP 404")
+    assert run_recaps(fake_db, NOW, "token", FakeSession({}, models=[])).startswith("failed: BiG ReD: gemini-flash-latest: HTTP 404")
 
     original = fake_db.select
 

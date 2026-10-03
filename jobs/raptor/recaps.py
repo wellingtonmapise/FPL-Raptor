@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 from collections import Counter
@@ -34,10 +35,14 @@ log = logging.getLogger("raptor.recaps")
 
 JOB_NAME = "recaps"
 MIGRATION = "supabase/migrations/20261003000003_scout_and_recaps.sql"
-# Gemini's OpenAI-compatible endpoint.
+# Gemini's OpenAI-compatible endpoints.
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-# Free-tier models, tried in order; the next is used if one is unavailable or rate-limited.
-MODELS = ("gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite")
+MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
+# Google retires model versions often, so the Flash models (the free tier) are
+# looked up on each run; these aliases are the fallback if the list is unavailable.
+MODELS = ("gemini-flash-latest", "gemini-flash-lite-latest")
+NOT_TEXT = ("image", "tts", "audio", "live", "embedding", "robotics", "computer-use")
+MAX_MODELS = 5
 COVERAGE = 0.75  # share of the league's squads with final points before writing
 CHIP_NAMES = {"wildcard": "Wildcard", "freehit": "Free Hit", "bboost": "Bench Boost", "3xc": "Triple Captain", "manager": "Assistant Manager"}
 
@@ -168,11 +173,34 @@ def _error_text(resp) -> str:
     return " ".join(str(message).split())[:100]
 
 
+def rank_models(ids: list[str]) -> list[str]:
+    """Text-only Flash models, best first: the -latest alias, then the newest
+    stable versions, then previews, then the lighter Flash-Lite ones."""
+    flash = [i.removeprefix("models/") for i in ids]
+    flash = [i for i in flash if "flash" in i and not any(word in i for word in NOT_TEXT)]
+
+    def key(model: str):
+        found = re.search(r"gemini-(\d+(?:\.\d+)?)", model)
+        version = float(found.group(1)) if found else 0.0
+        return ("lite" in model, not model.endswith("-latest"), "preview" in model or "exp" in model, -version, model)
+
+    return sorted(set(flash), key=key)
+
+
+def candidate_models(token: str, session: requests.Session) -> list[str]:
+    try:
+        resp = session.get(MODELS_URL, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        ids = [m["id"] for m in resp.json().get("data", [])] if resp.ok else []
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
+        ids = []
+    return (rank_models(ids) or list(MODELS))[:MAX_MODELS]
+
+
 def write_recap(facts: dict, token: str, session: requests.Session | None = None, sleep=time.sleep) -> tuple[str, str, str]:
-    """-> (model, headline, body). Tries each model in turn, retrying busy ones."""
+    """-> (model, headline, body). Tries each Flash model in turn, retrying busy ones."""
     session = session or requests.Session()
     problems = []
-    for model in MODELS:
+    for model in candidate_models(token, session):
         for attempt in range(len(RETRY_WAITS) + 1):
             try:
                 resp = session.post(
