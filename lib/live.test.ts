@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   bonusFromBps,
+  headToHead,
   isMatchTime,
+  leagueImpact,
   liveGameweeks,
   liveTable,
   provisionalBonus,
@@ -204,5 +206,47 @@ describe("liveGameweeks and isMatchTime", () => {
     const upcoming = { started: false, finished: false, finished_provisional: false };
     expect(isMatchTime([fixture(1, 1, 2, { ...upcoming, kickoff_time: "2026-10-10T14:00:00Z" })], now)).toBe(true);
     expect(isMatchTime([fixture(1, 1, 2, { ...upcoming, kickoff_time: "2026-10-11T14:00:00Z" })], now)).toBe(false);
+  });
+});
+
+describe("leagueImpact and headToHead", () => {
+  // Three managers with the same squad except: I captain 9 (Haaland-type), rival B captains 10,
+  // and rival C has player 16 instead of 11.
+  const p16: LivePlayer = { id: 16, web_name: "P16", team_id: 2, position: 3 };
+  const players16 = new Map([...players, [16, p16]]);
+  const team = (captain: number, swap?: [number, number]) =>
+    picks.map((p) => {
+      const element = swap && p.element === swap[0] ? swap[1] : p.element;
+      return { ...p, element, is_captain: element === captain, multiplier: p.position <= 11 ? (element === captain ? 2 : 1) : 0 };
+    });
+  const live = liveFor({ 9: [90, 10], 10: [90, 2], 11: [90, 6] });
+  live.set(16, element(16, 90, 1, 2));
+  const score = (ps: LivePick[]) => scoreTeam(ps, null, 0, players16, live, done, new Map());
+  const members = [
+    { team_id: 1, manager_name: "Me", team_name: "m", startTotal: 100, live: score(team(9)) },
+    { team_id: 2, manager_name: "B", team_name: "b", startTotal: 105, live: score(team(10)) },
+    { team_id: 3, manager_name: "C", team_name: "c", startTotal: 90, live: score(team(9, [11, 16])) },
+  ];
+
+  it("ranks players by what they're worth to you against the average rival", () => {
+    const impacts = leagueImpact(members, 1);
+    const byId = new Map(impacts.map((i) => [i.id, i]));
+    expect(byId.get(9)).toMatchObject({ mine: 2, eo: 1.5, impact: 5 }); // 10 pts x (2 - 1.5)
+    expect(byId.get(11)).toMatchObject({ mine: 1, eo: 0.5, impact: 3 });
+    expect(byId.get(10)).toMatchObject({ mine: 1, eo: 1.5, impact: -1 });
+    expect(byId.get(16)).toMatchObject({ mine: 0, eo: 0.5, impact: -0.5 });
+    expect(impacts[0].id).toBe(9);
+    expect(byId.has(1)).toBe(false); // everyone owns him the same way: no effect
+  });
+
+  it("breaks down the race with your nearest rival", () => {
+    const h2h = headToHead(liveTable(members), 1)!;
+    expect(h2h.rival.team_id).toBe(2);
+    expect(h2h.swings.map((s) => [s.id, s.diff])).toEqual([
+      [9, 10],
+      [10, -2],
+    ]);
+    expect(h2h.gwDiff).toBe(8);
+    expect(h2h.ahead).toBe(true); // 100 + 40ish vs 105 + 32ish
   });
 });

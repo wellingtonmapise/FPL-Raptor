@@ -10,7 +10,9 @@ import { getEventFixtures, getLive, getPicks } from "@/lib/fplApi";
 import { CHIP_NAMES } from "@/lib/gameweek";
 import { ordinal } from "@/lib/league";
 import {
+  headToHead,
   isMatchTime,
+  leagueImpact,
   liveGameweeks,
   liveTable,
   matchState,
@@ -245,6 +247,10 @@ export default async function LivePage({ searchParams }: PageProps<"/live">) {
   const active = isMatchTime(fixtures);
   const anyBonusPending = bonus.size > 0;
   const pitch = team ? livePitch(team, shortName) : null;
+  const impacts = table.length > 1 ? leagueImpact(liveMembers, myTeamId) : [];
+  const saving = impacts.filter((i) => i.impact >= 0.5).slice(0, 4);
+  const hurting = [...impacts].reverse().filter((i) => i.impact <= -0.5).slice(0, 4);
+  const race = table.length > 1 ? headToHead(table, myTeamId) : null;
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
@@ -287,6 +293,72 @@ export default async function LivePage({ searchParams }: PageProps<"/live">) {
           </div>
         </Card>
       ) : null}
+      {(saving.length > 0 || hurting.length > 0) && (
+        <Card title="Who's moving you" note={leagueName ? `against the rest of ${leagueName}` : undefined}>
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { label: "Saving you", rows: saving, tone: "text-emerald-700 dark:text-emerald-400" },
+              { label: "Hurting you", rows: hurting, tone: "text-rose-700 dark:text-rose-400" },
+            ].map((col) => (
+              <div key={col.label}>
+                <h3 className={`text-sm font-semibold ${col.tone}`}>{col.label}</h3>
+                {col.rows.length === 0 ? (
+                  <p className="mt-1 text-sm text-zinc-500">Nobody yet.</p>
+                ) : (
+                  <ul className="mt-1 space-y-2">
+                    {col.rows.map((r) => (
+                      <li key={r.id} className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <PlayerLink id={r.id} className="block truncate text-sm font-medium">
+                            {r.name}
+                          </PlayerLink>
+                          <div className="text-[11px] text-zinc-500 tabular-nums">
+                            {r.points} pts, you {r.mine === 0 ? "don't" : `×${r.mine}`}, league {Math.round(r.eo * 100)}%
+                          </div>
+                        </div>
+                        <span className={`text-sm font-bold tabular-nums ${col.tone}`}>
+                          {r.impact > 0 ? "+" : "−"}
+                          {Math.abs(r.impact).toFixed(1)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+          {race && race.swings.length > 0 && (
+            <div className="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              <p className="text-sm">
+                <span className="font-semibold">You vs {race.rival.manager_name.split(" ")[0]}</span>{" "}
+                <span className="text-zinc-500">
+                  ({race.ahead ? `you're ${race.gap} ahead` : `${race.gap} behind`} live, {race.gwDiff >= 0 ? "+" : "−"}
+                  {Math.abs(race.gwDiff)} this week)
+                </span>
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {race.swings.map((sw) => (
+                  <span
+                    key={sw.id}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
+                      sw.diff > 0
+                        ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                        : "bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                    }`}
+                  >
+                    {sw.name} {sw.diff > 0 ? "+" : "−"}
+                    {Math.abs(sw.diff)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-zinc-500">
+            +5 means that player has gained you 5 points on the average rival: his points times how much more of him you
+            have than they do (captains count double).
+          </p>
+        </Card>
+      )}
       {team ? (
         <ViewToggle
           title="Your players"

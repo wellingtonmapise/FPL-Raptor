@@ -278,3 +278,69 @@ export function isMatchTime(fixtures: LiveFixture[], now: number = Date.now()): 
     return state === "upcoming" && !!f.kickoff_time && Date.parse(f.kickoff_time) - now < 3 * 3600_000;
   });
 }
+
+export type Impact = {
+  id: number;
+  name: string;
+  points: number; // live points so far (before anyone's captaincy)
+  mine: number; // your multiplier: 0 if he isn't scoring for you, 2 if he's your captain
+  eo: number; // the rest of the league's average multiplier (1.4 = 140% effective ownership)
+  impact: number; // points × (mine − eo): what he's worth to you against the average rival
+};
+
+const multiplierOf = (team: TeamLive, id: number) => team.picks.find((p) => p.pick.element === id)?.multiplier ?? 0;
+
+/**
+ * Who's saving you and who's hurting you in your league: each player's live
+ * points times how much more (or less) of him you have than the average rival.
+ * Owning a player everyone owns gains you nothing; a captain only you picked
+ * gains you double.
+ */
+export function leagueImpact(members: LiveMember[], myTeamId: number): Impact[] {
+  const me = members.find((m) => m.team_id === myTeamId)?.live;
+  const rivals = members.filter((m) => m.team_id !== myTeamId && m.live).map((m) => m.live!);
+  if (!me || rivals.length === 0) return [];
+  const players = new Map<number, { name: string; points: number }>();
+  for (const team of [me, ...rivals]) {
+    for (const sp of team.picks) players.set(sp.pick.element, { name: sp.player?.web_name ?? `#${sp.pick.element}`, points: sp.points });
+  }
+  const out: Impact[] = [];
+  for (const [id, { name, points }] of players) {
+    if (points === 0) continue;
+    const mine = multiplierOf(me, id);
+    const eo = rivals.reduce((s, t) => s + multiplierOf(t, id), 0) / rivals.length;
+    const impact = points * (mine - eo);
+    if (Math.abs(impact) >= 0.05) out.push({ id, name, points, mine, eo, impact });
+  }
+  return out.sort((a, b) => b.impact - a.impact);
+}
+
+export type Swing = { id: number; name: string; points: number; mine: number; theirs: number; diff: number };
+export type HeadToHead = { rival: LiveRow; ahead: boolean; gap: number; gwDiff: number; swings: Swing[] };
+
+/** You against the manager just above you (or just below, if you're top), this gameweek. */
+export function headToHead(table: LiveRow[], myTeamId: number): HeadToHead | null {
+  const ranked = [...table].sort((a, b) => a.rank - b.rank || b.liveTotal - a.liveTotal);
+  const i = ranked.findIndex((r) => r.team_id === myTeamId);
+  if (i < 0 || ranked.length < 2) return null;
+  const me = ranked[i];
+  const rival = i > 0 ? ranked[i - 1] : ranked[1];
+  if (!me.live || !rival.live) return null;
+  const ids = new Set([...me.live.picks, ...rival.live.picks].map((p) => p.pick.element));
+  const swings: Swing[] = [];
+  for (const id of ids) {
+    const sp = me.live.picks.find((p) => p.pick.element === id) ?? rival.live.picks.find((p) => p.pick.element === id)!;
+    const mine = multiplierOf(me.live, id);
+    const theirs = multiplierOf(rival.live, id);
+    const diff = sp.points * (mine - theirs);
+    if (diff !== 0) swings.push({ id, name: sp.player?.web_name ?? `#${id}`, points: sp.points, mine, theirs, diff });
+  }
+  swings.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff) || b.diff - a.diff);
+  return {
+    rival,
+    ahead: me.liveTotal >= rival.liveTotal,
+    gap: Math.abs(me.liveTotal - rival.liveTotal),
+    gwDiff: (me.gwPoints ?? 0) - (rival.gwPoints ?? 0),
+    swings: swings.slice(0, 6),
+  };
+}

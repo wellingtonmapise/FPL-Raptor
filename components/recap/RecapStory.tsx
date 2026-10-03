@@ -1,7 +1,8 @@
 "use client";
 
 import "@fontsource/luckiest-guy/400.css";
-import { useRef, useState, useTransition } from "react";
+import { toBlob } from "html-to-image";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { react } from "@/app/league/[id]/actions";
 import Raptor from "@/components/recap/Raptor";
 import Sticker from "@/components/recap/Sticker";
@@ -42,7 +43,19 @@ function ComicTitle({ children, size = "text-[34px]" }: { children: React.ReactN
   );
 }
 
-function Panel({ bg, light = false, children, label }: { bg: string; light?: boolean; children: React.ReactNode; label: string }) {
+function Panel({
+  bg,
+  light = false,
+  children,
+  label,
+  stamp,
+}: {
+  bg: string;
+  light?: boolean;
+  children: React.ReactNode;
+  label: string;
+  stamp?: string; // small credit along the bottom, so shared pictures say where they're from
+}) {
   return (
     <article
       aria-label={label}
@@ -50,6 +63,9 @@ function Panel({ bg, light = false, children, label }: { bg: string; light?: boo
       style={{ backgroundColor: bg, borderColor: INK, boxShadow: `5px 6px 0 ${INK}`, ...DOTS(light) }}
     >
       {children}
+      {stamp && (
+        <span className={`absolute right-4 bottom-1 text-[10px] font-semibold ${light ? "text-white/60" : "text-zinc-900/55"}`}>{stamp}</span>
+      )}
     </article>
   );
 }
@@ -68,10 +84,10 @@ function Bubble({ who, children }: { who?: string; children: React.ReactNode }) 
   );
 }
 
-function AwardCard({ card }: { card: RecapCard }) {
+function AwardCard({ card, stamp }: { card: RecapCard; stamp: string }) {
   const style = STYLE[card.kind] ?? { bg: "#FFD23F" };
   return (
-    <Panel bg={style.bg} light={style.light} label={`${card.title}: ${card.manager}, ${card.stat}`}>
+    <Panel bg={style.bg} light={style.light} label={`${card.title}: ${card.manager}, ${card.stat}`} stamp={stamp}>
       <div className="pr-24">
         <ComicTitle>{card.title}</ComicTitle>
       </div>
@@ -95,10 +111,10 @@ function AwardCard({ card }: { card: RecapCard }) {
   );
 }
 
-function Cover({ recap, leagueName }: { recap: Recap; leagueName: string }) {
+function Cover({ recap, leagueName, stamp }: { recap: Recap; leagueName: string; stamp: string }) {
   const cast = (recap.cards ?? []).filter((c, i, all) => all.findIndex((x) => x.manager === c.manager) === i).slice(0, 4);
   return (
-    <Panel bg="#1B1B1E" light label={`GW${recap.gameweek_id} recap: ${recap.title}`}>
+    <Panel bg="#1B1B1E" light label={`GW${recap.gameweek_id} recap: ${recap.title}`} stamp={stamp}>
       <p className="flex justify-between text-sm font-semibold text-white/70">
         <span>{leagueName}</span>
         <span aria-hidden>Swipe →</span>
@@ -132,7 +148,7 @@ function Reactions({
 }) {
   const mine = tally.mine[cardId];
   return (
-    <div className="mt-3 flex justify-center gap-2" role="group" aria-label="React">
+    <div className="flex justify-center gap-1.5" role="group" aria-label="React">
       {REACTIONS.map((r) => {
         const count = tally.counts[cardId]?.[r] ?? 0;
         const on = mine === r;
@@ -143,7 +159,7 @@ function Reactions({
             aria-pressed={on}
             aria-label={`${r}${count ? `, ${count}` : ""}`}
             onClick={() => onReact(cardId, on ? null : r)}
-            className={`flex min-w-12 items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-base transition-transform active:scale-90 ${
+            className={`flex min-w-10 items-center justify-center gap-1 rounded-full border-2 px-2 py-1 text-base transition-transform active:scale-90 ${
               on ? "border-zinc-900 bg-[#FFD23F] text-zinc-900 dark:border-[#FFD23F]" : "border-zinc-200 bg-white text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
             }`}
           >
@@ -168,14 +184,68 @@ export default function RecapStory({
   reactions: Tally | null; // null: reactions aren't available to you here
 }) {
   const cards = recap.cards ?? [];
-  const slides: { id: string; node: React.ReactNode }[] = [
-    { id: "cover", node: <Cover recap={recap} leagueName={leagueName} /> },
-    ...cards.map((c) => ({ id: c.id, node: <AwardCard card={c} /> })),
+  const stamp = `${leagueName} GW${recap.gameweek_id}, FPL Raptor`;
+  const slides: { id: string; node: React.ReactNode; text: string }[] = [
+    { id: "cover", node: <Cover recap={recap} leagueName={leagueName} stamp={stamp} />, text: `${leagueName} GW${recap.gameweek_id} recap: ${recap.title}` },
+    ...cards.map((c) => ({
+      id: c.id,
+      node: <AwardCard card={c} stamp={stamp} />,
+      text: `${c.title}: ${c.manager} (${c.stat}). ${c.caption}`.trim(),
+    })),
   ];
+  const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pictures = useRef(new Map<number, Blob>());
+  const [sharing, setSharing] = useState<number | null>(null);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+
+  // Draw a card as a picture (2x for sharp text). Cards near the one on screen
+  // are drawn ahead of time, so sharing starts straight from the tap (phones
+  // only allow the share sheet right after one).
+  const picture = async (i: number): Promise<Blob | null> => {
+    const cached = pictures.current.get(i);
+    if (cached) return cached;
+    const node = slideRefs.current[i]?.firstElementChild as HTMLElement | null;
+    if (!node) return null;
+    const blob = await toBlob(node, { pixelRatio: 2, style: { boxShadow: "none", margin: "0", borderRadius: "0" } });
+    if (blob) pictures.current.set(i, blob);
+    return blob;
+  };
   const scroller = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [tally, setTally] = useState<Tally | null>(reactions);
   const [, startReacting] = useTransition();
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void picture(index).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(id);
+  }, [index]); // redraw only when the card on screen changes
+
+  const share = async (i: number) => {
+    setSharing(i);
+    setShareNote(null);
+    try {
+      const blob = await picture(i);
+      if (!blob) throw new Error("no picture");
+      const file = new File([blob], `fpl-raptor-gw${recap.gameweek_id}-${slides[i].id}.png`, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], text: slides[i].text });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        a.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+        setShareNote("Saved the picture. Send it to the group chat from your downloads.");
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") setShareNote("Couldn't make the picture. Try again.");
+    } finally {
+      setSharing(null);
+    }
+  };
 
   const go = (i: number) => {
     const el = scroller.current;
@@ -205,10 +275,24 @@ export default function RecapStory({
         onScroll={onScroll}
         className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {slides.map((s) => (
+        {slides.map((s, i) => (
           <div key={s.id} className="w-[86%] max-w-[400px] shrink-0 snap-center">
-            {s.node}
-            {tally && s.id !== "cover" && <Reactions cardId={s.id} tally={tally} onReact={onReact} />}
+            <div ref={(el) => void (slideRefs.current[i] = el)}>{s.node}</div>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              {tally && s.id !== "cover" && <Reactions cardId={s.id} tally={tally} onReact={onReact} />}
+              <button
+                type="button"
+                onClick={() => void share(i)}
+                disabled={sharing !== null}
+                aria-label="Share this card"
+                className="flex items-center gap-1 rounded-full border-2 border-zinc-900 bg-white px-3 py-1 text-sm font-bold text-zinc-900 active:scale-95 disabled:opacity-60 dark:border-zinc-200 dark:bg-zinc-900 dark:text-white"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
+                </svg>
+                {sharing === i ? "…" : "Share"}
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -237,6 +321,7 @@ export default function RecapStory({
           Next →
         </button>
       </div>
+      {shareNote && <p className="mt-2 text-center text-sm text-zinc-600 dark:text-zinc-400">{shareNote}</p>}
       <details className="group mt-3 rounded-2xl border border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <summary className="cursor-pointer list-none font-semibold">
           Read the full roast <span className="text-zinc-400 group-open:hidden">+</span>
