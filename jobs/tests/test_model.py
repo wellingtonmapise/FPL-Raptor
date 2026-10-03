@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from raptor.model.features import FEATURES, availability_factor, build_features
-from raptor.model.predict import HORIZON, load_model, predict
+from raptor.model.predict import HORIZON, fixtures_frame, history_rows, load_model, player_stats_rows, predict
 
 TEAMS = [1, 2, 3, 4]
 
@@ -151,3 +151,31 @@ def test_blank_gameweek_predicts_zero():
     gw7 = out[out.gameweek_id == 7].set_index("player_id")["expected_points"]
     assert gw7[11] == 0 and gw7[21] == 0  # both sides of the removed fixture blank
     assert gw7[31] > 0
+
+
+def test_player_stats_for_the_scout_page():
+    model, meta = load_model()
+    bootstrap, fixtures = make_bootstrap(), make_fixtures()
+    for p in bootstrap["elements"]:
+        p.update(minutes=450, goals_scored=2, expected_goals="1.83", points_per_game="4.6", ict_index="31.2")
+    live = make_live(bootstrap, fixtures)
+    out = predict(bootstrap, fixtures, live, model, meta["features"], NOW)
+    history = history_rows(live, bootstrap, fixtures_frame(fixtures, "2026-27"), "2026-27")
+    rows = {r["player_id"]: r for r in player_stats_rows(bootstrap, history, out, NOW)}
+    star = rows[21]
+    assert star["minutes"] == 450 and star["goals"] == 2 and star["xg"] == 1.83 and star["points_per_game"] == 4.6
+    assert star["recent_gameweeks"] == 5 and star["recent_points"] == 35 and star["recent_xg"] == 2.75
+    assert star["xp_gameweek"] == 6
+    assert star["xp_next5"] == round(out[out.player_id == 21]["expected_points"].sum(), 2)
+    assert rows[10]["xp_next"] == 0  # injured
+
+
+def test_player_stats_skip_politely_before_the_migration(fake_db):
+    from raptor.db import SupabaseError
+    from raptor.model.predict import save_player_stats
+
+    def upsert(*args, **kwargs):
+        raise SupabaseError('upsert player_stats failed: HTTP 404 {"code":"PGRST205"}')
+
+    fake_db.upsert = upsert
+    assert save_player_stats(fake_db, [{"player_id": 1}]).startswith("scout stats skipped")

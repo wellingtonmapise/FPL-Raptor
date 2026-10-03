@@ -6,6 +6,9 @@ Rebuilds this season's player history from FPL's live endpoint (one request
 per played gameweek), builds the same features the model was trained on,
 predicts every player's points for each upcoming fixture, scales by FPL's
 chance of playing, and saves the totals per gameweek to `predictions`.
+
+Also refreshes `player_stats` for the Scout page: season totals, the last six
+gameweeks, and each player's expected points for the next one and five.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 from raptor.config import load_settings
-from raptor.db import Database
+from raptor.db import Database, SupabaseError
 from raptor.fpl import FplClient, FplUnavailable
 from raptor.model.features import availability_factor, build_features
 from raptor.run import announce, utc_now
@@ -31,6 +34,8 @@ log = logging.getLogger("raptor.predict")
 MODEL_DIR = Path(__file__).resolve().parents[2] / "model"
 HORIZON = 5  # gameweeks ahead
 JOB_NAME = "predict"
+RECENT = 6  # gameweeks in the Scout page's "recent" stats
+STATS_MIGRATION = "supabase/migrations/20261003000003_scout_and_recaps.sql"
 
 
 def _num(value) -> float:
@@ -176,6 +181,75 @@ def predict(bootstrap: dict, fixtures_json: list[dict], live_by_gw: dict[int, di
     return totals.rename(columns={"element": "player_id", "gameweek": "gameweek_id", "xp": "expected_points"})
 
 
+def _int(value) -> int | None:
+    return None if value is None or value == "" else int(float(value))
+
+
+def _round(value, places: int = 2) -> float | None:
+    return None if value is None or value == "" else round(float(value), places)
+
+
+def player_stats_rows(bootstrap: dict, history: pd.DataFrame, predictions: pd.DataFrame, now: datetime) -> list[dict]:
+    """One row per player for the Scout page."""
+    recent = pd.DataFrame()
+    window = 0
+    if not history.empty:
+        last = int(history["gameweek"].max())
+        played = sorted(history["gameweek"].unique())
+        window = min(RECENT, len(played))
+        recent = history[history["gameweek"] > last - RECENT].groupby("element")[["minutes", "points", "xg", "xa", "dc"]].sum()
+    xp_gw = int(predictions["gameweek_id"].min()) if not predictions.empty else None
+    by_player = predictions.groupby("player_id")["expected_points"] if not predictions.empty else None
+    xp_next = predictions[predictions["gameweek_id"] == xp_gw].set_index("player_id")["expected_points"] if xp_gw else pd.Series(dtype=float)
+    xp_total = by_player.sum() if by_player is not None else pd.Series(dtype=float)
+    stamp = now.isoformat(timespec="seconds")
+    rows = []
+    for p in bootstrap["elements"]:
+        pid = p["id"]
+        r = recent.loc[pid] if pid in recent.index else None
+        rows.append(
+            {
+                "player_id": pid,
+                "minutes": _int(p.get("minutes")),
+                "starts": _int(p.get("starts")),
+                "goals": _int(p.get("goals_scored")),
+                "assists": _int(p.get("assists")),
+                "clean_sheets": _int(p.get("clean_sheets")),
+                "bonus": _int(p.get("bonus")),
+                "defensive_contribution": _int(p.get("defensive_contribution")),
+                "xg": _round(p.get("expected_goals")),
+                "xa": _round(p.get("expected_assists")),
+                "xgi": _round(p.get("expected_goal_involvements")),
+                "xgc": _round(p.get("expected_goals_conceded")),
+                "points_per_game": _round(p.get("points_per_game"), 1),
+                "ict": _round(p.get("ict_index"), 1),
+                "recent_gameweeks": window,
+                "recent_minutes": int(r["minutes"]) if r is not None else 0,
+                "recent_points": int(r["points"]) if r is not None else 0,
+                "recent_xg": round(float(r["xg"]), 2) if r is not None else 0.0,
+                "recent_xa": round(float(r["xa"]), 2) if r is not None else 0.0,
+                "recent_dc": int(r["dc"]) if r is not None and pd.notna(r["dc"]) else 0,
+                "transfers_in_event": _int(p.get("transfers_in_event")),
+                "transfers_out_event": _int(p.get("transfers_out_event")),
+                "xp_gameweek": xp_gw,
+                "xp_next": round(float(xp_next.get(pid, 0.0)), 2) if xp_gw else None,
+                "xp_next5": round(float(xp_total.get(pid, 0.0)), 2) if xp_gw else None,
+                "updated_at": stamp,
+            }
+        )
+    return rows
+
+
+def save_player_stats(db: Database, rows: list[dict]) -> str:
+    try:
+        db.upsert("player_stats", rows, on_conflict="player_id")
+    except SupabaseError as exc:
+        if "PGRST205" in str(exc) or ("player_stats" in str(exc) and "does not exist" in str(exc)):
+            return f"scout stats skipped (run {STATS_MIGRATION})"
+        raise
+    return f"scout stats for {len(rows)} players"
+
+
 def load_model():
     meta = json.loads((MODEL_DIR / "xpts.json").read_text())
     return joblib.load(MODEL_DIR / "xpts.joblib"), meta
@@ -193,8 +267,10 @@ def run_predict(fpl: FplClient, db: Database, now: datetime) -> str:
             live_by_gw[gw] = data
 
     result = predict(bootstrap, fixtures_json, live_by_gw, model, meta["features"], now)
+    history = history_rows(live_by_gw, bootstrap, fixtures_frame(fixtures_json, season_label(bootstrap)), season_label(bootstrap))
+    stats_note = save_player_stats(db, player_stats_rows(bootstrap, history, result, now))
     if result.empty:
-        return "no upcoming gameweeks"
+        return f"no upcoming gameweeks; {stats_note}"
     created = now.isoformat(timespec="seconds")
     db.upsert(
         "predictions",
@@ -217,7 +293,7 @@ def run_predict(fpl: FplClient, db: Database, now: datetime) -> str:
     gws = sorted(result["gameweek_id"].unique())
     return (
         f"{len(result):,} predictions for GW{gws[0]}-{gws[-1]} from {len(live_by_gw)} played gameweeks "
-        f"(model {meta['version']}); top for GW{first_gw}: {leaders}"
+        f"(model {meta['version']}); top for GW{first_gw}: {leaders}; {stats_note}"
     )
 
 

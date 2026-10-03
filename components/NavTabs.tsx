@@ -9,6 +9,7 @@ const TABS = [
   { href: "/me", label: "Team", icon: "M8 3 4 6l2 4 2-1v12h8V9l2 1 2-4-4-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z" },
   { href: "/live", label: "Live", icon: "M3 12h4l3-8 4 16 3-8h4" },
   { href: "/planner", label: "Planner", icon: "M4 7h14l-4-4M20 17H6l4 4" },
+  { href: "/scout", label: "Scout", icon: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm5-2 4 4" },
   { href: "/league", label: "League", icon: "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4m8-4h3a3 3 0 0 1-3 4m-4 3v4m-3 4h6m-5-4h4v4h-4z" },
 ];
 
