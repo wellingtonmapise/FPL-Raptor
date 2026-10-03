@@ -91,6 +91,27 @@ def test_db_secret_key_goes_in_apikey_only():
     assert db.base == "https://x.supabase.co/rest/v1"
 
 
+def test_db_accepts_the_rest_endpoint_form_of_the_url():
+    for url in (
+        "https://x.supabase.co",
+        "https://x.supabase.co/",
+        "https://x.supabase.co/rest/v1",
+        "https://x.supabase.co/rest/v1/",
+        "  https://x.supabase.co/rest/v1/\n",
+    ):
+        db = Database(url, "sb_secret_abc", session=FakeSession([]))
+        assert db.base == "https://x.supabase.co/rest/v1", url
+
+
+def test_db_error_includes_a_hint():
+    from raptor.db import SupabaseError
+
+    body = '{"code":"PGRST125","message":"Invalid path specified in request URL"}'
+    db = Database("https://x.supabase.co", "sb_secret_abc", session=FakeSession([FakeResponse(404, text=body)]))
+    with pytest.raises(SupabaseError, match="Hint: Check SUPABASE_URL"):
+        db.insert("job_runs", [{"job": "fetch"}], returning=True)
+
+
 def test_db_legacy_jwt_key_also_sets_authorization():
     db = Database("https://x.supabase.co", "eyJhbGciOi.fake", session=FakeSession([]))
     assert db.session.headers["Authorization"] == "Bearer eyJhbGciOi.fake"

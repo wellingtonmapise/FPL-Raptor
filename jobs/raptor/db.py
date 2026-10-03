@@ -18,9 +18,30 @@ class SupabaseError(Exception):
     pass
 
 
+# Plain-English next steps for the PostgREST errors you're most likely to hit.
+HINTS = {
+    "PGRST125": "Check SUPABASE_URL is the project URL, like https://abcd1234.supabase.co.",
+    "PGRST205": "A table is missing: run supabase/migrations in the Supabase SQL Editor.",
+    "PGRST301": "Check SUPABASE_SECRET_KEY is the secret key (sb_secret_...).",
+}
+
+
+def project_url(url: str) -> str:
+    """Accept the project URL with or without a trailing /rest/v1 or slash.
+
+    Supabase shows the URL in more than one form, and pasting the REST
+    endpoint (…/rest/v1) would otherwise double the path.
+    """
+    url = url.strip().rstrip("/")
+    if url.endswith("/rest/v1"):
+        url = url[: -len("/rest/v1")]
+    return url.rstrip("/")
+
+
 class Database:
     def __init__(self, url: str, key: str, session: requests.Session | None = None) -> None:
-        self.base = url.rstrip("/") + "/rest/v1"
+        self.base = project_url(url) + "/rest/v1"
+        key = key.strip()
         self.session = session or requests.Session()
         headers = {"apikey": key, "Content-Type": "application/json"}
         if key.startswith("eyJ"):
@@ -29,7 +50,11 @@ class Database:
 
     def _check(self, resp: requests.Response, what: str) -> requests.Response:
         if resp.status_code >= 400:
-            raise SupabaseError(f"{what} failed: HTTP {resp.status_code} {resp.text[:300]}")
+            message = f"{what} failed: HTTP {resp.status_code} {resp.text[:300]}"
+            hint = next((h for code, h in HINTS.items() if code in resp.text), None)
+            if hint:
+                message += f"\nHint: {hint}"
+            raise SupabaseError(message)
         return resp
 
     def select(

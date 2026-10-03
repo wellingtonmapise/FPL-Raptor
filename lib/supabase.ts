@@ -11,8 +11,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * builds and shows setup steps instead of crashing.
  */
 export function getSupabase(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return null;
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (!rawUrl || !key) return null;
+  // Accept the URL with or without a trailing /rest/v1 or slash.
+  const url = rawUrl.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
   return createClient(url, key, { auth: { persistSession: false } });
 }
