@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import Countdown from "@/components/Countdown";
+import Pitch from "@/components/Pitch";
 import { availabilityLabel, SquadList } from "@/components/Squad";
+import ViewToggle from "@/components/ViewToggle";
 import { formatPrice } from "@/lib/fpl";
 import { getEntry, getPicks } from "@/lib/fplApi";
 import {
@@ -18,7 +20,13 @@ import {
   type PredictionRow,
   type Team,
 } from "@/lib/gameweek";
-import { gameweekRange, headline, laterChips, type TransferPlanRow } from "@/lib/plan";
+import { teamPitch } from "@/lib/pitch";
+import {
+  gameweekRange,
+  headline,
+  laterChips,
+  type TransferPlanRow,
+} from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
 
@@ -42,9 +50,16 @@ type GameweekStats = {
   value: number | null;
 };
 
-const PLAYER_COLUMNS = "id,web_name,team_id,position,now_cost,status,news,chance_of_playing_next_round";
+const PLAYER_COLUMNS =
+  "id,web_name,team_id,position,now_cost,status,news,chance_of_playing_next_round";
 
-function Card({ title, children }: { title?: string; children: React.ReactNode }) {
+function Card({
+  title,
+  children,
+}: {
+  title?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
       {title && <h2 className="mb-3 font-semibold">{title}</h2>}
@@ -76,7 +91,10 @@ export default async function MyGameweekPage() {
   const teamId = profile.fpl_team_id;
 
   const [gameweeksRes, teamsRes, entry] = await Promise.all([
-    supabase.from("gameweeks").select("id,name,deadline_time,is_current,is_next").order("id"),
+    supabase
+      .from("gameweeks")
+      .select("id,name,deadline_time,is_current,is_next")
+      .order("id"),
     supabase.from("teams").select("id,name,short_name"),
     getEntry(teamId),
   ]);
@@ -94,13 +112,17 @@ export default async function MyGameweekPage() {
     const [entryRow, pickRows] = await Promise.all([
       supabase
         .from("entry_gameweeks")
-        .select("active_chip,points,points_on_bench,event_transfers,event_transfers_cost,bank,value")
+        .select(
+          "active_chip,points,points_on_bench,event_transfers,event_transfers_cost,bank,value",
+        )
         .eq("team_id", teamId)
         .eq("gameweek_id", current.id)
         .maybeSingle<GameweekStats>(),
       supabase
         .from("picks")
-        .select("player_id,squad_position,multiplier,is_captain,is_vice_captain")
+        .select(
+          "player_id,squad_position,multiplier,is_captain,is_vice_captain",
+        )
         .eq("team_id", teamId)
         .eq("gameweek_id", current.id),
     ]);
@@ -117,7 +139,10 @@ export default async function MyGameweekPage() {
           is_captain: p.is_captain,
           is_vice_captain: p.is_vice_captain,
         }));
-        stats = { ...live.data.entry_history, active_chip: live.data.active_chip };
+        stats = {
+          ...live.data.entry_history,
+          active_chip: live.data.active_chip,
+        };
       } else {
         fplUnavailable = live.reason === "unavailable";
       }
@@ -132,7 +157,9 @@ export default async function MyGameweekPage() {
     next
       ? supabase
           .from("fixtures")
-          .select("id,gameweek_id,home_team_id,away_team_id,home_difficulty,away_difficulty,kickoff_time")
+          .select(
+            "id,gameweek_id,home_team_id,away_team_id,home_difficulty,away_difficulty,kickoff_time",
+          )
           .eq("gameweek_id", next.id)
       : Promise.resolve({ data: [] }),
     next && picks.length
@@ -144,7 +171,9 @@ export default async function MyGameweekPage() {
       : Promise.resolve({ data: [] }),
     supabase
       .from("transfer_plans")
-      .select("from_gameweek,horizon,free_transfers,bank,plan,expected_points,baseline_points,model_version,created_at")
+      .select(
+        "from_gameweek,horizon,free_transfers,bank,plan,expected_points,baseline_points,model_version,created_at",
+      )
       .eq("user_id", userId)
       .maybeSingle<TransferPlanRow>(),
   ]);
@@ -158,8 +187,12 @@ export default async function MyGameweekPage() {
   const captains = captainOptions(squad.starters, xp).slice(0, 3);
   const xiTotal = expectedXI(squad.starters, xp);
   // Only show a plan made for the coming deadline (and none until the table exists).
-  const plan = planRes.data && next && planRes.data.from_gameweek === next.id ? planRes.data : null;
+  const plan =
+    planRes.data && next && planRes.data.from_gameweek === next.id
+      ? planRes.data
+      : null;
   const suggestion = plan ? headline(plan) : null;
+  const pitch = teamPitch(squad.starters, squad.bench, xp);
 
   const teamName = entry.ok ? entry.data.name : null;
   const managerName = entry.ok
@@ -169,7 +202,9 @@ export default async function MyGameweekPage() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">{teamName ?? "My gameweek"}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {teamName ?? "My gameweek"}
+        </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           {[
             managerName,
@@ -200,29 +235,59 @@ export default async function MyGameweekPage() {
         </Card>
       )}
 
+      {picks.length > 0 ? (
+        <ViewToggle
+          title="Your team"
+          note={`${squad.formation}${xp.size ? ", shirts show xP" : ""}`}
+          pitch={<Pitch starters={pitch.starters} bench={pitch.bench} />}
+          list={
+            <Card>
+              <SquadList players={squad.starters} xp={xp} />
+              <h2 className="mt-4 mb-1 font-semibold">Bench</h2>
+              <SquadList players={squad.bench} dim xp={xp} />
+            </Card>
+          }
+        />
+      ) : (
+        <Card>
+          <p className="text-zinc-600 dark:text-zinc-400">
+            {!current
+              ? "Your squad shows up here after the first deadline of the season."
+              : fplUnavailable
+                ? "FPL isn't responding right now, so your squad can't load. Try again in a few minutes."
+                : "Couldn't find a squad for this team yet. Check your team ID is right."}
+          </p>
+        </Card>
+      )}
       {picks.length > 0 && (
-        <Card title={squad.flagged.length ? "Needs attention" : undefined}>
-          {squad.flagged.length === 0 ? (
-            <p className="text-zinc-600 dark:text-zinc-400">No injury or availability flags in your team.</p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {squad.flagged.map((sp) => (
-                <li key={sp.player_id}>
-                  <div className="font-medium">
-                    {sp.player?.web_name}{" "}
-                    <span className="text-sm font-normal text-zinc-500">
-                      {sp.club} · {availabilityLabel(sp)}
-                      {sp.squad_position > 11 ? " · on your bench" : ""}
-                      {sp.is_captain ? " · your captain" : ""}
-                    </span>
-                  </div>
-                  {sp.player?.news && (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">{sp.player.news}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+        <p className="-mt-3 text-xs text-zinc-500">
+          Tap a player for their card. This is your team as of the{" "}
+          {current?.name} deadline: FPL doesn&apos;t share transfers until the
+          next deadline passes.
+        </p>
+      )}
+
+      {squad.flagged.length > 0 && (
+        <Card title="Needs attention">
+          <ul className="flex flex-col gap-3">
+            {squad.flagged.map((sp) => (
+              <li key={sp.player_id}>
+                <div className="font-medium">
+                  {sp.player?.web_name}{" "}
+                  <span className="text-sm font-normal text-zinc-500">
+                    {sp.club} · {availabilityLabel(sp)}
+                    {sp.squad_position > 11 ? " · on your bench" : ""}
+                    {sp.is_captain ? " · your captain" : ""}
+                  </span>
+                </div>
+                {sp.player?.news && (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    {sp.player.news}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 
@@ -231,10 +296,14 @@ export default async function MyGameweekPage() {
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-lg font-semibold">
               {captains[0].player.player?.web_name}{" "}
-              <span className="text-base font-normal text-zinc-500">{captains[0].xp.toFixed(1)} xP</span>
+              <span className="text-base font-normal text-zinc-500">
+                {captains[0].xp.toFixed(1)} xP
+              </span>
             </p>
             {xiTotal !== null && (
-              <span className="text-sm text-zinc-500">XI: {xiTotal.toFixed(1)} xP</span>
+              <span className="text-sm text-zinc-500">
+                XI: {xiTotal.toFixed(1)} xP
+              </span>
             )}
           </div>
           {captains.length > 1 && (
@@ -248,18 +317,23 @@ export default async function MyGameweekPage() {
             </p>
           )}
           <p className="mt-3 text-xs text-zinc-500">
-            Expected points from the FPL Raptor model, scaled by FPL&apos;s chance of playing. Based on
-            your {current?.name} team.
+            Expected points from the FPL Raptor model, scaled by FPL&apos;s
+            chance of playing. Based on your {current?.name} team.
           </p>
         </Card>
       )}
 
       {plan && suggestion && (
-        <Card title={suggestion.chip ? "Chip and transfers" : "Transfer suggestion"}>
+        <Card
+          title={suggestion.chip ? "Chip and transfers" : "Transfer suggestion"}
+        >
           {suggestion.chip && (
             <p className="mb-2 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
               Play {suggestion.chip.label}
-              {suggestion.chip.captain ? ` on ${suggestion.chip.captain}` : ""} this week
+              {suggestion.chip.captain
+                ? ` on ${suggestion.chip.captain}`
+                : ""}{" "}
+              this week
             </p>
           )}
           <p className="text-lg font-semibold">
@@ -284,64 +358,55 @@ export default async function MyGameweekPage() {
       )}
 
       {stats && current && (
-        <Card title={`${current.name}${stats.active_chip ? ` · ${CHIP_NAMES[stats.active_chip] ?? stats.active_chip}` : ""}`}>
+        <Card
+          title={`${current.name}${stats.active_chip ? ` · ${CHIP_NAMES[stats.active_chip] ?? stats.active_chip}` : ""}`}
+        >
           <div className="grid grid-cols-3 gap-4">
             <Stat label="Points" value={String(stats.points ?? "-")} />
-            <Stat label="On bench" value={String(stats.points_on_bench ?? "-")} />
+            <Stat
+              label="On bench"
+              value={String(stats.points_on_bench ?? "-")}
+            />
             <Stat
               label="Transfers"
               value={`${stats.event_transfers ?? 0}${stats.event_transfers_cost ? ` (−${stats.event_transfers_cost})` : ""}`}
             />
             <Stat label="Bank" value={formatPrice(stats.bank)} />
             <Stat label="Team value" value={formatPrice(stats.value)} />
-            <Stat label="Captain" value={squad.captain?.player?.web_name ?? "-"} />
+            <Stat
+              label="Captain"
+              value={squad.captain?.player?.web_name ?? "-"}
+            />
           </div>
-        </Card>
-      )}
-
-      {picks.length > 0 ? (
-        <Card>
-          <div className="mb-1 flex items-baseline justify-between">
-            <h2 className="font-semibold">Starting XI</h2>
-            <span className="text-sm text-zinc-500">
-              {squad.formation}
-              {next ? ` · ${next.name} fixtures` : ""}
-            </span>
-          </div>
-          <SquadList players={squad.starters} xp={xp} />
-          <h2 className="mt-4 mb-1 font-semibold">Bench</h2>
-          <SquadList players={squad.bench} dim xp={xp} />
-          <p className="mt-4 text-xs text-zinc-500">
-            Your team as of the {current?.name} deadline. FPL doesn&apos;t share transfers until the next
-            deadline passes.
-          </p>
-        </Card>
-      ) : (
-        <Card>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            {!current
-              ? "Your squad shows up here after the first deadline of the season."
-              : fplUnavailable
-                ? "FPL isn't responding right now, so your squad can't load. Try again in a few minutes."
-                : "Couldn't find a squad for this team yet. Check your team ID is right."}
-          </p>
         </Card>
       )}
 
       <div className="flex items-center justify-between text-sm">
         <div className="flex gap-4">
-          <Link href="/planner" className="text-zinc-500 underline-offset-4 hover:underline">
+          <Link
+            href="/planner"
+            className="text-zinc-500 underline-offset-4 hover:underline"
+          >
             Planner
           </Link>
-          <Link href="/notifications" className="text-zinc-500 underline-offset-4 hover:underline">
+          <Link
+            href="/notifications"
+            className="text-zinc-500 underline-offset-4 hover:underline"
+          >
             Notifications
           </Link>
-          <Link href="/onboarding" className="text-zinc-500 underline-offset-4 hover:underline">
+          <Link
+            href="/onboarding"
+            className="text-zinc-500 underline-offset-4 hover:underline"
+          >
             Change team
           </Link>
         </div>
         <form action={signOut}>
-          <button type="submit" className="text-zinc-500 underline-offset-4 hover:underline">
+          <button
+            type="submit"
+            className="text-zinc-500 underline-offset-4 hover:underline"
+          >
             Sign out
           </button>
         </form>

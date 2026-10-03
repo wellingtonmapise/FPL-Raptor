@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import PlayerSheetProvider from "@/components/PlayerSheet";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:pb-0">
         <SiteHeader />
-        {children}
+        <PlayerSheetProvider>{children}</PlayerSheetProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

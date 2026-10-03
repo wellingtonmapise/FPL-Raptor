@@ -3,6 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AutoRefresh from "@/components/AutoRefresh";
 import LocalTime from "@/components/LocalTime";
+import Pitch from "@/components/Pitch";
+import PlayerLink from "@/components/PlayerLink";
+import ViewToggle from "@/components/ViewToggle";
 import { getEventFixtures, getLive, getPicks } from "@/lib/fplApi";
 import { CHIP_NAMES } from "@/lib/gameweek";
 import { ordinal } from "@/lib/league";
@@ -22,6 +25,7 @@ import {
   type ScoredPick,
   type TeamLive,
 } from "@/lib/live";
+import { livePitch } from "@/lib/pitch";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Live · FPL Raptor" };
@@ -83,7 +87,9 @@ function PlayerRow({ sp, shortName }: { sp: ScoredPick; shortName: (id: number) 
       <span className="w-8 shrink-0 text-xs text-zinc-500">{POS[p?.position ?? 0]}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-medium">{p?.web_name ?? `#${sp.pick.element}`}</span>
+          <PlayerLink id={sp.pick.element} className="truncate font-medium">
+            {p?.web_name ?? `#${sp.pick.element}`}
+          </PlayerLink>
           {badge && (
             <span className="rounded-full bg-zinc-900 px-1.5 text-[10px] font-bold leading-4 text-white dark:bg-zinc-100 dark:text-zinc-900">{badge}</span>
           )}
@@ -238,6 +244,7 @@ export default async function LivePage({ searchParams }: PageProps<"/live">) {
   const doneCount = fixtures.filter((f) => matchState(f) === "done").length;
   const active = isMatchTime(fixtures);
   const anyBonusPending = bonus.size > 0;
+  const pitch = team ? livePitch(team, shortName) : null;
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
@@ -255,7 +262,7 @@ export default async function LivePage({ searchParams }: PageProps<"/live">) {
       </header>
 
       {team ? (
-        <Card title="Your team" note={mine && table.length > 1 ? leagueName ?? undefined : undefined}>
+        <Card title="Your score" note={mine && table.length > 1 ? leagueName ?? undefined : undefined}>
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="text-5xl font-bold tabular-nums">{team.points}</div>
@@ -278,30 +285,33 @@ export default async function LivePage({ searchParams }: PageProps<"/live">) {
               </div>
             )}
           </div>
-          <ul className="mt-4 divide-y divide-zinc-100 dark:divide-zinc-800/80">
-            {team.picks
-              .filter((p) => p.pick.position <= 11)
-              .map((sp) => (
-                <PlayerRow key={sp.pick.element} sp={sp} shortName={shortName} />
-              ))}
-          </ul>
-          <h3 className="mt-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Bench{team.chip === "bboost" ? " (Bench Boost: all count)" : ""}
-          </h3>
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-            {team.picks
-              .filter((p) => p.pick.position > 11)
-              .map((sp) => (
-                <PlayerRow key={sp.pick.element} sp={sp} shortName={shortName} />
-              ))}
-          </ul>
-          {anyBonusPending && (
-            <p className="mt-3 text-xs text-zinc-500">
-              Provisional bonus is worked out from the BPS so far; FPL confirms it about an hour after each match.
-              Automatic subs are shown once a starter&apos;s matches are over.
-            </p>
-          )}
         </Card>
+      ) : null}
+      {team ? (
+        <ViewToggle
+          title="Your players"
+          note={anyBonusPending ? "* includes provisional bonus" : undefined}
+          pitch={<Pitch starters={pitch!.starters} bench={pitch!.bench} benchNote={team.chip === "bboost" ? "Bench Boost: all count" : undefined} />}
+          list={
+            <Card>
+              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                {team.picks
+                  .filter((p) => p.pick.position <= 11)
+                  .map((sp) => (
+                    <PlayerRow key={sp.pick.element} sp={sp} shortName={shortName} />
+                  ))}
+              </ul>
+              <h3 className="mt-4 text-sm font-semibold">Bench{team.chip === "bboost" ? " (Bench Boost: all count)" : ""}</h3>
+              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                {team.picks
+                  .filter((p) => p.pick.position > 11)
+                  .map((sp) => (
+                    <PlayerRow key={sp.pick.element} sp={sp} shortName={shortName} />
+                  ))}
+              </ul>
+            </Card>
+          }
+        />
       ) : (
         <Card>
           <p className="text-zinc-600 dark:text-zinc-400">Couldn&apos;t load your squad for {gw.name} from FPL. Try again in a minute.</p>

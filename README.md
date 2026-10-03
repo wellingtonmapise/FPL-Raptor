@@ -9,9 +9,9 @@ Built: the database and a scheduled job that pulls FPL data into it, sign-in, My
 ```
 FPL-Raptor/
 ├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /live, /planner, /scout, /league, /notifications
-├── components/              Countdown, squad list, header and tab bar, auto-refresh, install help
+├── components/              Pitch, shirts, player card, countdown, squad list, header and tab bar, install help
 ├── public/                  sw.js (shows notifications) and app icons
-├── lib/                     Supabase clients, FPL helpers, squad, league, live scoring and Scout logic (+ Vitest tests)
+├── lib/                     Supabase clients, FPL helpers, squad, league, live scoring, Scout, pitch and player-card logic (+ Vitest tests)
 ├── proxy.ts                 Refreshes the sign-in session on every request
 ├── jobs/                    Python: the scheduled FPL -> Supabase fetch
 │   ├── raptor/              fpl.py (API + parsing), db.py, changes.py, run.py (fetch), alerts.py (push), recaps.py (AI recaps)
@@ -71,9 +71,9 @@ To make a new pair: `npx web-push generate-vapid-keys`. Put the private key in b
 
 1. Open the site and tap **My gameweek**, then **Create an account** with an email and password.
 2. Paste your FPL team ID (the number after `/entry/` on your Points page) or the whole Points link.
-3. **Team** (My gameweek) shows your deadline countdown, flagged players with FPL's injury news, the model's captain pick and a transfer suggestion, last gameweek's points, bank and team value, and your squad with each player's next fixture, its difficulty and expected points.
+3. **Team** (My gameweek) shows your deadline countdown, your team on a pitch (club-colour shirts with each player's expected points on the shirt and next fixture underneath; a list view too), flagged players with FPL's injury news, the model's captain pick and a transfer suggestion, and last gameweek's points, bank and team value. Tap any player, anywhere in the app, for their card: price, availability, form, ownership, the next five fixtures with expected points, the last five results and underlying stats.
 4. **Live** shows your points as matches happen: provisional bonus, projected automatic subs, the vice-captain taking over if needed, and your league's live table. It refreshes every minute while matches are on.
-5. **Planner** shows the full plan for the next four gameweeks: what to sell and buy each week, whether a hit is worth it, which chips to play when (or save), the captain, XI and bench.
+5. **Planner** shows the full plan for the next four gameweeks, a tab per week: what to sell and buy, whether a hit is worth it, which chips to play when (or save), and the team on a pitch with new signings ringed.
 6. **Scout** has a fixture ticker (every club's next 3 or 6 gameweeks by difficulty), underlying stats (xP, xGI/90, xG, xA, defensive contributions, for the season or the last six gameweeks) and differentials (good picks almost nobody in your league has).
 7. **League** shows each followed mini-league you're in: the AI recap of the last gameweek, the table with movement, your closest rival (what they start that you don't, and their captain), the week's awards, everyone's captains, and who owns whom (the template, your differentials, and threats you don't own).
 8. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.

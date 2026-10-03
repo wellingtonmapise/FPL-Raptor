@@ -79,3 +79,8 @@ export function getLive(gameweekId: number) {
 export function getEventFixtures(gameweekId: number) {
   return getJson<import("@/lib/live").LiveFixture[]>(`fixtures/?event=${gameweekId}`, 60);
 }
+
+/** One player's fixtures and this season's results. */
+export function getElementSummary(playerId: number) {
+  return getJson<import("@/lib/player").ElementSummary>(`element-summary/${playerId}/`, 1800);
+}

@@ -1,3 +1,4 @@
+import PlayerLink from "@/components/PlayerLink";
 import type { NextFixture, SquadPlayer } from "@/lib/gameweek";
 import { formatPrice, POSITIONS } from "@/lib/fpl";
 
@@ -61,7 +62,9 @@ function PlayerRow({ sp, dim, xp }: { sp: SquadPlayer; dim?: boolean; xp?: numbe
       <span className="w-9 shrink-0 text-xs font-medium text-zinc-500">{p ? POSITIONS[p.position] : ""}</span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="truncate font-medium">{p?.web_name ?? `Player ${sp.player_id}`}</span>
+          <PlayerLink id={sp.player_id} className="truncate font-medium">
+            {p?.web_name ?? `Player ${sp.player_id}`}
+          </PlayerLink>
           {sp.is_captain && (
             <span className="rounded-full bg-zinc-900 px-1.5 text-xs font-bold text-white dark:bg-white dark:text-zinc-900">
               C

@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { formatPrice, POSITIONS } from "@/lib/fpl";
+import PlanWeeks from "@/components/PlanWeeks";
+import { formatPrice } from "@/lib/fpl";
 import {
   adviceText,
-  chipLabel,
   chipOptions,
   gameweekRange,
   headline,
   laterChips,
   WORTHWHILE_GAIN,
   type ChipOption,
-  type PlanPlayer,
   type TransferPlanRow,
 } from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
@@ -32,7 +31,6 @@ function Card({ title, note, children }: { title?: string; note?: string; childr
   );
 }
 
-const names = (players: PlanPlayer[]) => players.map((p) => p.name).join(", ");
 const sign = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
 
 const CHIP_BADGE =
@@ -105,11 +103,15 @@ export default async function PlannerPage() {
   const userId = await currentUserId(supabase);
   if (!userId) redirect("/login?next=/planner");
 
-  const { data } = await supabase
-    .from("transfer_plans")
-    .select("from_gameweek,horizon,free_transfers,bank,plan,expected_points,baseline_points,model_version,created_at")
-    .eq("user_id", userId)
-    .maybeSingle<TransferPlanRow>();
+  const [{ data }, { data: teamRows }] = await Promise.all([
+    supabase
+      .from("transfer_plans")
+      .select("from_gameweek,horizon,free_transfers,bank,plan,expected_points,baseline_points,model_version,created_at")
+      .eq("user_id", userId)
+      .maybeSingle<TransferPlanRow>(),
+    supabase.from("teams").select("id,short_name"),
+  ]);
+  const clubs = Object.fromEntries(((teamRows ?? []) as { id: number; short_name: string }[]).map((t) => [t.id, t.short_name]));
 
   if (!data) {
     return (
@@ -187,67 +189,7 @@ export default async function PlannerPage() {
 
       <ChipsCard row={data} />
 
-      {weeks.map((w) => (
-        <Card
-          key={w.gameweek}
-          title={`GW${w.gameweek}${w.chip ? ` · ${chipLabel(w.chip)}` : ""}`}
-          note={`${w.chip === "wildcard" || w.chip === "freehit" ? "unlimited transfers" : `${w.free_transfers} free transfer${w.free_transfers === 1 ? "" : "s"}`} · ${w.expected_points.toFixed(1)} xP`}
-        >
-          {w.chip === "freehit" && w.transfers.length > 0 && (
-            <p className="mb-2 text-xs text-zinc-500">This week&apos;s team only: your squad returns for GW{w.gameweek + 1}.</p>
-          )}
-          {w.chip === "bboost" && <p className="mb-2 text-xs text-zinc-500">Your bench scores too.</p>}
-          {w.chip === "3xc" && <p className="mb-2 text-xs text-zinc-500">Your captain scores triple.</p>}
-          {w.transfers.length === 0 ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">No transfers{w.free_transfers < 5 ? " (bank it)" : ""}.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {w.transfers.map((t) => (
-                <li key={`${t.out.id}-${t.in.id}`} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-rose-700 dark:text-rose-400">{t.out.name}</div>
-                    <div className="text-xs text-zinc-500">
-                      {POSITIONS[t.out.position]} · sells {formatPrice(t.out.sell ?? t.out.price)}
-                    </div>
-                  </div>
-                  <span className="text-zinc-400">→</span>
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-emerald-700 dark:text-emerald-400">{t.in.name}</div>
-                    <div className="text-xs text-zinc-500">
-                      {formatPrice(t.in.price)} · {t.in.xp?.toFixed(1) ?? "-"} xP
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {w.hits > 0 && (
-            <p className="mt-2 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              −{4 * w.hits} hit
-            </p>
-          )}
-          <dl className="mt-3 space-y-1 text-sm">
-            <div className="flex gap-2">
-              <dt className="w-16 shrink-0 text-zinc-500">Captain</dt>
-              <dd>
-                {w.captain.name} <span className="text-zinc-500">{w.captain.xp?.toFixed(1)} xP</span>
-              </dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-16 shrink-0 text-zinc-500">XI</dt>
-              <dd className="text-zinc-700 dark:text-zinc-300">{names(w.lineup)}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-16 shrink-0 text-zinc-500">Bench</dt>
-              <dd className="text-zinc-700 dark:text-zinc-300">{names(w.bench)}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-16 shrink-0 text-zinc-500">Bank</dt>
-              <dd>{formatPrice(w.bank_after)}</dd>
-            </div>
-          </dl>
-        </Card>
-      ))}
+      <PlanWeeks weeks={weeks} clubs={clubs} />
 
       <p className="text-xs text-zinc-500">
         The plan starts from your team at the last deadline; transfers you&apos;ve made since aren&apos;t visible to the

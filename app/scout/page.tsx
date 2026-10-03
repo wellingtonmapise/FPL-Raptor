@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import PlayerLink from "@/components/PlayerLink";
 import { formatPrice, POSITIONS } from "@/lib/fpl";
 import type { Fixture, Team } from "@/lib/gameweek";
 import {
@@ -327,7 +328,9 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
                   {table.map((r) => (
                     <tr key={r.player.id} className={mine.has(r.player.id) ? "text-emerald-800 dark:text-emerald-300" : ""}>
                       <td className="sticky left-0 max-w-36 bg-white py-1.5 pr-2 dark:bg-[#0a0a0a]">
-                        <div className="truncate font-medium">{r.player.web_name}</div>
+                        <PlayerLink id={r.player.id} className="block max-w-full truncate font-medium">
+                          {r.player.web_name}
+                        </PlayerLink>
                         <div className="truncate text-[11px] text-zinc-500">
                           {shortName.get(r.player.team_id)} · {POSITIONS[r.player.position]} · {formatPrice(r.player.now_cost)}
                           {r.player.status !== "a" ? " · ⚠" : ""}
@@ -370,7 +373,9 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
             {diffs.map((d) => (
               <li key={d.row.player.id} className="flex items-center gap-3 py-2.5">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{d.row.player.web_name}</div>
+                  <PlayerLink id={d.row.player.id} className="block max-w-full truncate font-medium">
+                    {d.row.player.web_name}
+                  </PlayerLink>
                   <div className="truncate text-xs text-zinc-500">
                     {shortName.get(d.row.player.team_id)} · {POSITIONS[d.row.player.position]} ·{" "}
                     {formatPrice(d.row.player.now_cost)} · {d.row.player.selected_by_percent ?? 0}%
