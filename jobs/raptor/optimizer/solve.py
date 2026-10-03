@@ -50,7 +50,11 @@ class Player:
 class Settings:
     discount: float = 0.85  # weight of each later gameweek relative to the one before
     bench_weight: float = 0.1  # value of a bench player's expected points
-    transfer_penalty: float = 0.1  # tiny cost per transfer so equal swaps aren't suggested
+    # Predictions flatter the players the planner picks (it picks whoever it rates
+    # highest, so its errors lean upwards), so moves must clear a bar. Both were
+    # tuned on a replay of 2024/25 and checked on 2025/26 (jobs/backtest/REPORT.md).
+    transfer_penalty: float = 1.0  # points any transfer must gain beyond what it costs
+    hit_margin: float = 2.0  # extra points a paid transfer must gain beyond its 4
     time_limit: int = 30  # seconds per solve
 
 
@@ -66,6 +70,8 @@ class Week:
     expected_points: float  # lineup + captain (and bench/triple captain with chips), before hits
     bank_after: int
     chip: str | None = None
+    sold: list[Player] = field(default_factory=list)  # every player out and in, even unpaired
+    bought: list[Player] = field(default_factory=list)  # (a new squad's first week has no outs)
 
 
 @dataclass
@@ -82,14 +88,26 @@ class Plan:
 
 
 def candidate_pool(players: list[Player], squad: set[int], xp: dict[tuple[int, int], float], gameweeks: list[int],
-                   per_position: dict[int, int] | None = None) -> list[Player]:
-    """Your squad plus the best players per position over the horizon (keeps the model small)."""
+                   per_position: dict[int, int] | None = None, cheap_per_position: dict[int, int] | None = None) -> list[Player]:
+    """Your squad, the best players per position over the horizon, and the best cheap ones.
+
+    Keeps the model small. The cheap picks (best among the lowest-priced quarter
+    of each position) are the budget fillers that pay for upgrades elsewhere.
+    """
     per_position = per_position or {1: 6, 2: 18, 3: 18, 4: 10}
+    cheap_per_position = cheap_per_position or {1: 3, 2: 5, 3: 5, 4: 3}
     total = {p.id: sum(xp.get((p.id, g), 0.0) for g in gameweeks) for p in players}
     chosen = {p.id for p in players if p.id in squad}
     for pos, k in per_position.items():
         best = sorted((p for p in players if p.position == pos and total[p.id] > 0), key=lambda p: -total[p.id])[:k]
         chosen.update(p.id for p in best)
+    for pos, k in cheap_per_position.items():
+        prices = sorted(p.price for p in players if p.position == pos and total[p.id] > 0)
+        if not prices:
+            continue
+        cutoff = prices[len(prices) // 4]
+        cheap = sorted((p for p in players if p.position == pos and p.price <= cutoff and total[p.id] > 0), key=lambda p: -total[p.id])[:k]
+        chosen.update(p.id for p in cheap)
     return [p for p in players if p.id in chosen]
 
 
@@ -148,7 +166,7 @@ def solve(
         )
 
     m += pulp.lpSum(
-        weight[g] * (points(g) - HIT_COST * paid[g] - s.transfer_penalty * pulp.lpSum(buy[p, g] for p in P)) for g in G
+        weight[g] * (points(g) - (HIT_COST + s.hit_margin) * paid[g] - s.transfer_penalty * pulp.lpSum(buy[p, g] for p in P)) for g in G
     )
 
     m += ft[G[0]] == min(max(free_transfers, 0), MAX_FREE_TRANSFERS)
@@ -238,6 +256,8 @@ def solve(
                 expected_points=total,
                 bank_after=round(money[g].value() or 0),
                 chip=chips.get(g),
+                sold=outs,
+                bought=ins,
             )
         )
         if initial and i == 0:

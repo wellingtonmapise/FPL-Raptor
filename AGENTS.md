@@ -21,3 +21,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - League maths (awards, captains, ownership, rival) lives in `lib/league.ts`; the alerts job has a small Python twin for league pushes.
 - Model: features in `jobs/raptor/model/features.py` are shared by training and live prediction; change them in one place and retrain (`uv run python -m raptor.model.train`) so `jobs/model/` matches.
 - Optimizer: `jobs/raptor/optimizer/solve.py` is the integer program (PuLP 2.x with bundled CBC; pulp 3+/4 changed the API, so it's pinned `<3`). `inputs.py` derives free transfers, bank and selling prices from public FPL history. The web app reads the saved plan via `lib/plan.ts`.
+- Chips: `jobs/raptor/optimizer/chips.py` tries each unused chip in each planned week and keeps it only above THRESHOLDS (or when it's about to expire). Planner settings (transfer penalty, hit margin, chip bars) were tuned on the 2024/25 replay; retune with `raptor.backtest.season --season 2024-25 --tag NAME ...` and check on 2025/26, not the other way round.
+- Live scoring (provisional bonus, auto-subs, vice-captain) lives in `lib/live.ts`; Scout maths in `lib/scout.ts`.
+- Recaps: `jobs/raptor/recaps.py` uses GitHub Models with the workflow's GITHUB_TOKEN (`models: read`); the model only sees the facts dict from `league_facts`.

@@ -1,0 +1,1332 @@
+{
+ "season": "2024-25",
+ "chips": true,
+ "settings": {
+  "discount": 0.85,
+  "bench_weight": 0.1,
+  "transfer_penalty": 0.1,
+  "hit_margin": 0.0,
+  "time_limit": 20
+ },
+ "thresholds": {
+  "wildcard": 12.0,
+  "freehit": 10.0,
+  "bboost": 10.0,
+  "3xc": 9.0
+ },
+ "total": 2024,
+ "weeks": [
+  {
+   "gameweek": 1,
+   "chip": null,
+   "transfers": [
+    [
+     "",
+     "Becker"
+    ],
+    [
+     "",
+     "Benda"
+    ],
+    [
+     "",
+     "White"
+    ],
+    [
+     "",
+     "Robertson"
+    ],
+    [
+     "",
+     "Trippier"
+    ],
+    [
+     "",
+     "Mbabu"
+    ],
+    [
+     "",
+     "Targett"
+    ],
+    [
+     "",
+     "Palmer"
+    ],
+    [
+     "",
+     "\u00d8degaard"
+    ],
+    [
+     "",
+     "Fernandes"
+    ],
+    [
+     "",
+     "Gordon"
+    ],
+    [
+     "",
+     "Traor\u00e9"
+    ],
+    [
+     "",
+     "Watkins"
+    ],
+    [
+     "",
+     "Mateta"
+    ],
+    [
+     "",
+     "Ribeiro"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 4,
+   "points": 38,
+   "bench_points": 0,
+   "expected": 37.6,
+   "autosubs": [
+    [
+     "Ribeiro",
+     "Traor\u00e9"
+    ]
+   ],
+   "bank": 0,
+   "team_value": 1000,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 2,
+   "chip": "wildcard",
+   "transfers": [
+    [
+     "Becker",
+     "Martin"
+    ],
+    [
+     "Benda",
+     "Steele"
+    ],
+    [
+     "Robertson",
+     "Collins"
+    ],
+    [
+     "Trippier",
+     "Dunk"
+    ],
+    [
+     "Mbabu",
+     "Hecke"
+    ],
+    [
+     "Targett",
+     "Lewis"
+    ],
+    [
+     "Palmer",
+     "Heung-min"
+    ],
+    [
+     "\u00d8degaard",
+     "Silva"
+    ],
+    [
+     "Fernandes",
+     "D\u00edaz"
+    ],
+    [
+     "Gordon",
+     "Doku"
+    ],
+    [
+     "Traor\u00e9",
+     "Pereira"
+    ],
+    [
+     "Watkins",
+     "Haaland"
+    ],
+    [
+     "Mateta",
+     "Solanke-Mitchell"
+    ],
+    [
+     "Ribeiro",
+     "Armstrong"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Haaland",
+   "captain_points": 34,
+   "points": 87,
+   "bench_points": 12,
+   "expected": 64.49,
+   "autosubs": [
+    [
+     "Solanke-Mitchell",
+     "White"
+    ]
+   ],
+   "bank": 2,
+   "team_value": 998,
+   "chip_gains": {
+    "wildcard": 30.8,
+    "freehit": 12.35,
+    "bboost": 2.79,
+    "3xc": 7.44
+   }
+  },
+  {
+   "gameweek": 3,
+   "chip": null,
+   "transfers": [
+    [
+     "Martin",
+     "Neto"
+    ],
+    [
+     "Heung-min",
+     "Palmer"
+    ],
+    [
+     "Solanke-Mitchell",
+     "Havertz"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 2,
+   "captain": "Palmer",
+   "captain_points": 12,
+   "points": 68,
+   "bench_points": 5,
+   "expected": 59.97,
+   "autosubs": [],
+   "bank": 0,
+   "team_value": 998,
+   "chip_gains": {
+    "freehit": 7.65,
+    "bboost": 8.89,
+    "3xc": 7.88
+   }
+  },
+  {
+   "gameweek": 4,
+   "chip": null,
+   "transfers": [
+    [
+     "Doku",
+     "Semenyo"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Haaland",
+   "captain_points": 26,
+   "points": 57,
+   "bench_points": 1,
+   "expected": 53.33,
+   "autosubs": [],
+   "bank": 9,
+   "team_value": 999,
+   "chip_gains": {
+    "freehit": 9.21,
+    "bboost": 9.19,
+    "3xc": 7.18
+   }
+  },
+  {
+   "gameweek": 5,
+   "chip": "freehit",
+   "transfers": [
+    [
+     "Steele",
+     "Romero"
+    ],
+    [
+     "Neto",
+     "Muric"
+    ],
+    [
+     "White",
+     "Porro"
+    ],
+    [
+     "Lewis",
+     "Teixeira"
+    ],
+    [
+     "Dunk",
+     "Digne"
+    ],
+    [
+     "Hecke",
+     "Bednarek"
+    ],
+    [
+     "Collins",
+     "O'Shea"
+    ],
+    [
+     "Palmer",
+     "Salah"
+    ],
+    [
+     "Silva",
+     "Fernandes"
+    ],
+    [
+     "Semenyo",
+     "Eze"
+    ],
+    [
+     "Pereira",
+     "Tielemans"
+    ],
+    [
+     "Havertz",
+     "Wissa"
+    ],
+    [
+     "Armstrong",
+     "Archer"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 12,
+   "points": 64,
+   "bench_points": 5,
+   "expected": 58.83,
+   "autosubs": [
+    [
+     "Wissa",
+     "O'Shea"
+    ]
+   ],
+   "bank": 9,
+   "team_value": 998,
+   "chip_gains": {
+    "freehit": 11.52,
+    "bboost": 6.26,
+    "3xc": 6.41
+   }
+  },
+  {
+   "gameweek": 6,
+   "chip": null,
+   "transfers": [
+    [
+     "Neto",
+     "Flekken"
+    ],
+    [
+     "Lewis",
+     "Porro"
+    ],
+    [
+     "Silva",
+     "Heung-min"
+    ],
+    [
+     "Haaland",
+     "Watkins"
+    ],
+    [
+     "Armstrong",
+     "Jackson"
+    ]
+   ],
+   "hits": 3,
+   "free_transfers": 2,
+   "captain": "D\u00edaz",
+   "captain_points": 4,
+   "points": 60,
+   "bench_points": 0,
+   "expected": 59.53,
+   "autosubs": [
+    [
+     "White",
+     "Dunk"
+    ],
+    [
+     "Heung-min",
+     "Pereira"
+    ]
+   ],
+   "bank": 8,
+   "team_value": 994,
+   "chip_gains": {
+    "bboost": 6.45,
+    "3xc": 7.01
+   }
+  },
+  {
+   "gameweek": 7,
+   "chip": "3xc",
+   "transfers": [
+    [
+     "White",
+     "Alexander-Arnold"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 18,
+   "points": 55,
+   "bench_points": 8,
+   "expected": 73.06,
+   "autosubs": [
+    [
+     "Heung-min",
+     "Dunk"
+    ]
+   ],
+   "bank": 1,
+   "team_value": 992,
+   "chip_gains": {
+    "bboost": 7.47,
+    "3xc": 9.12
+   }
+  },
+  {
+   "gameweek": 8,
+   "chip": null,
+   "transfers": [
+    [
+     "Heung-min",
+     "Saka"
+    ],
+    [
+     "D\u00edaz",
+     "Mbeumo"
+    ],
+    [
+     "Pereira",
+     "Maddison"
+    ],
+    [
+     "Jackson",
+     "Jim\u00e9nez"
+    ]
+   ],
+   "hits": 3,
+   "free_transfers": 1,
+   "captain": "Mbeumo",
+   "captain_points": 4,
+   "points": 26,
+   "bench_points": 7,
+   "expected": 64.41,
+   "autosubs": [
+    [
+     "Saka",
+     "Semenyo"
+    ]
+   ],
+   "bank": 0,
+   "team_value": 992,
+   "chip_gains": {
+    "bboost": 7.09
+   }
+  },
+  {
+   "gameweek": 9,
+   "chip": null,
+   "transfers": [
+    [
+     "Saka",
+     "Salah"
+    ],
+    [
+     "Watkins",
+     "Calvert-Lewin"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 20,
+   "points": 54,
+   "bench_points": 2,
+   "expected": 60.89,
+   "autosubs": [],
+   "bank": 4,
+   "team_value": 990,
+   "chip_gains": {
+    "bboost": 9.61
+   }
+  },
+  {
+   "gameweek": 10,
+   "chip": null,
+   "transfers": [
+    [
+     "Maddison",
+     "Johnson"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Johnson",
+   "captain_points": 16,
+   "points": 44,
+   "bench_points": 11,
+   "expected": 55.61,
+   "autosubs": [],
+   "bank": 12,
+   "team_value": 991,
+   "chip_gains": {
+    "bboost": 6.58
+   }
+  },
+  {
+   "gameweek": 11,
+   "chip": null,
+   "transfers": [
+    [
+     "Calvert-Lewin",
+     "Cunha"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 4,
+   "points": 51,
+   "bench_points": 2,
+   "expected": 55.87,
+   "autosubs": [],
+   "bank": 3,
+   "team_value": 989,
+   "chip_gains": {
+    "bboost": 7.67
+   }
+  },
+  {
+   "gameweek": 12,
+   "chip": null,
+   "transfers": [
+    [
+     "Dunk",
+     "Davis"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Cunha",
+   "captain_points": 32,
+   "points": 90,
+   "bench_points": 1,
+   "expected": 49.68,
+   "autosubs": [
+    [
+     "Alexander-Arnold",
+     "Porro"
+    ],
+    [
+     "Havertz",
+     "Mbeumo"
+    ]
+   ],
+   "bank": 2,
+   "team_value": 988,
+   "chip_gains": {
+    "bboost": 8.91
+   }
+  },
+  {
+   "gameweek": 13,
+   "chip": null,
+   "transfers": [
+    [
+     "Havertz",
+     "Larsen"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Cunha",
+   "captain_points": 4,
+   "points": 67,
+   "bench_points": 10,
+   "expected": 59.27,
+   "autosubs": [
+    [
+     "Semenyo",
+     "Jim\u00e9nez"
+    ]
+   ],
+   "bank": 25,
+   "team_value": 987,
+   "chip_gains": {
+    "bboost": 8.13
+   }
+  },
+  {
+   "gameweek": 14,
+   "chip": null,
+   "transfers": [
+    [
+     "Salah",
+     "Saka"
+    ],
+    [
+     "Jim\u00e9nez",
+     "Barbosa"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 14,
+   "points": 30,
+   "bench_points": 9,
+   "expected": 52.47,
+   "autosubs": [],
+   "bank": 46,
+   "team_value": 989,
+   "chip_gains": {
+    "bboost": 9.88
+   }
+  },
+  {
+   "gameweek": 15,
+   "chip": null,
+   "transfers": [
+    [
+     "Steele",
+     "Arrizabalaga"
+    ],
+    [
+     "Alexander-Arnold",
+     "A\u00eft-Nouri"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Saka",
+   "captain_points": 4,
+   "points": 51,
+   "bench_points": 13,
+   "expected": 61.46,
+   "autosubs": [],
+   "bank": 63,
+   "team_value": 989,
+   "chip_gains": {
+    "bboost": 10.81
+   }
+  },
+  {
+   "gameweek": 16,
+   "chip": null,
+   "transfers": [
+    [
+     "Porro",
+     "Mu\u00f1oz"
+    ],
+    [
+     "Johnson",
+     "Salah"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 10,
+   "points": 36,
+   "bench_points": 9,
+   "expected": 64.29,
+   "autosubs": [],
+   "bank": 5,
+   "team_value": 989,
+   "chip_gains": {
+    "bboost": 8.85
+   }
+  },
+  {
+   "gameweek": 17,
+   "chip": null,
+   "transfers": [
+    [
+     "Mbeumo",
+     "Fern\u00e1ndez"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 6,
+   "points": 49,
+   "bench_points": 17,
+   "expected": 52.04,
+   "autosubs": [
+    [
+     "A\u00eft-Nouri",
+     "Hecke"
+    ],
+    [
+     "Mu\u00f1oz",
+     "Davis"
+    ]
+   ],
+   "bank": 29,
+   "team_value": 989,
+   "chip_gains": {
+    "bboost": 10.09
+   }
+  },
+  {
+   "gameweek": 18,
+   "chip": null,
+   "transfers": [
+    [
+     "Davis",
+     "Alexander-Arnold"
+    ],
+    [
+     "Salah",
+     "Szoboszlai"
+    ],
+    [
+     "Semenyo",
+     "Sarr"
+    ],
+    [
+     "Larsen",
+     "Isak"
+    ]
+   ],
+   "hits": 3,
+   "free_transfers": 1,
+   "captain": "Isak",
+   "captain_points": 16,
+   "points": 49,
+   "bench_points": 23,
+   "expected": 58.98,
+   "autosubs": [
+    [
+     "Saka",
+     "Fern\u00e1ndez"
+    ]
+   ],
+   "bank": 38,
+   "team_value": 988,
+   "chip_gains": {
+    "bboost": 10.4
+   }
+  },
+  {
+   "gameweek": 19,
+   "chip": null,
+   "transfers": [
+    [
+     "Saka",
+     "Salah"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 32,
+   "points": 82,
+   "bench_points": 3,
+   "expected": 55.5,
+   "autosubs": [
+    [
+     "Szoboszlai",
+     "Barbosa"
+    ]
+   ],
+   "bank": 5,
+   "team_value": 988,
+   "chip_gains": {
+    "bboost": 9.02
+   }
+  },
+  {
+   "gameweek": 20,
+   "chip": "wildcard",
+   "transfers": [
+    [
+     "Arrizabalaga",
+     "Pickford"
+    ],
+    [
+     "Flekken",
+     "D\u00fabravka"
+    ],
+    [
+     "Alexander-Arnold",
+     "Magalh\u00e3es"
+    ],
+    [
+     "A\u00eft-Nouri",
+     "Teixeira"
+    ],
+    [
+     "Mu\u00f1oz",
+     "Mitchell"
+    ],
+    [
+     "Collins",
+     "Digne"
+    ],
+    [
+     "Hecke",
+     "Huijsen"
+    ],
+    [
+     "Salah",
+     "Mbeumo"
+    ],
+    [
+     "Palmer",
+     "Silva"
+    ],
+    [
+     "Szoboszlai",
+     "Eze"
+    ],
+    [
+     "Sarr",
+     "Gibbs-White"
+    ],
+    [
+     "Fern\u00e1ndez",
+     "Wilson"
+    ],
+    [
+     "Barbosa",
+     "Haaland"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Haaland",
+   "captain_points": 26,
+   "points": 87,
+   "bench_points": 6,
+   "expected": 64.74,
+   "autosubs": [
+    [
+     "Cunha",
+     "Eze"
+    ]
+   ],
+   "bank": 8,
+   "team_value": 986,
+   "chip_gains": {
+    "wildcard": 22.65,
+    "bboost": 11.17
+   }
+  },
+  {
+   "gameweek": 21,
+   "chip": null,
+   "transfers": [
+    [
+     "Wilson",
+     "Salah"
+    ],
+    [
+     "Haaland",
+     "Gakpo"
+    ],
+    [
+     "Isak",
+     "Jesus"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 2,
+   "captain": "Salah",
+   "captain_points": 4,
+   "points": 26,
+   "bench_points": 11,
+   "expected": 53.57,
+   "autosubs": [
+    [
+     "Teixeira",
+     "Digne"
+    ],
+    [
+     "Jesus",
+     "Huijsen"
+    ]
+   ],
+   "bank": 19,
+   "team_value": 986,
+   "chip_gains": {
+    "bboost": 10.38
+   }
+  },
+  {
+   "gameweek": 22,
+   "chip": null,
+   "transfers": [
+    [
+     "Teixeira",
+     "Alexander-Arnold"
+    ],
+    [
+     "Salah",
+     "Palmer"
+    ],
+    [
+     "Silva",
+     "Diallo"
+    ],
+    [
+     "Cunha",
+     "Isak"
+    ]
+   ],
+   "hits": 3,
+   "free_transfers": 1,
+   "captain": "Isak",
+   "captain_points": 4,
+   "points": 31,
+   "bench_points": 8,
+   "expected": 62.46,
+   "autosubs": [
+    [
+     "Jesus",
+     "Mbeumo"
+    ]
+   ],
+   "bank": 6,
+   "team_value": 983,
+   "chip_gains": {
+    "bboost": 11.65
+   }
+  },
+  {
+   "gameweek": 23,
+   "chip": null,
+   "transfers": [
+    [
+     "Palmer",
+     "Foden"
+    ],
+    [
+     "Jesus",
+     "Watkins"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Foden",
+   "captain_points": 14,
+   "points": 71,
+   "bench_points": 16,
+   "expected": 61.22,
+   "autosubs": [],
+   "bank": 3,
+   "team_value": 981,
+   "chip_gains": {
+    "bboost": 12.25
+   }
+  },
+  {
+   "gameweek": 24,
+   "chip": null,
+   "transfers": [
+    [
+     "Magalh\u00e3es",
+     "Dijk"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Alexander-Arnold",
+   "captain_points": 14,
+   "points": 67,
+   "bench_points": 4,
+   "expected": 77.43,
+   "autosubs": [],
+   "bank": 3,
+   "team_value": 984,
+   "chip_gains": {
+    "bboost": 11.41
+   }
+  },
+  {
+   "gameweek": 25,
+   "chip": "bboost",
+   "transfers": [
+    [
+     "Alexander-Arnold",
+     "Kerkez"
+    ],
+    [
+     "Foden",
+     "Salah"
+    ],
+    [
+     "Gibbs-White",
+     "Kluivert"
+    ],
+    [
+     "Isak",
+     "Havertz"
+    ]
+   ],
+   "hits": 3,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 40,
+   "points": 68,
+   "bench_points": 0,
+   "expected": 98.78,
+   "autosubs": [],
+   "bank": 3,
+   "team_value": 984,
+   "chip_gains": {
+    "bboost": 13.06
+   }
+  },
+  {
+   "gameweek": 26,
+   "chip": null,
+   "transfers": [
+    [
+     "Digne",
+     "Robinson"
+    ],
+    [
+     "Havertz",
+     "Jim\u00e9nez"
+    ],
+    [
+     "Gakpo",
+     "Betuncal"
+    ]
+   ],
+   "hits": 2,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 28,
+   "points": 54,
+   "bench_points": 13,
+   "expected": 60.03,
+   "autosubs": [
+    [
+     "Diallo",
+     "Eze"
+    ]
+   ],
+   "bank": 46,
+   "team_value": 984,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 27,
+   "chip": null,
+   "transfers": [
+    [
+     "Diallo",
+     "Palmer"
+    ],
+    [
+     "Watkins",
+     "Cunha"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 6,
+   "points": 42,
+   "bench_points": 10,
+   "expected": 61.73,
+   "autosubs": [],
+   "bank": 9,
+   "team_value": 983,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 28,
+   "chip": null,
+   "transfers": [
+    [
+     "Robinson",
+     "Saseta"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 2,
+   "points": 62,
+   "bench_points": 4,
+   "expected": 64.71,
+   "autosubs": [
+    [
+     "Cunha",
+     "Betuncal"
+    ]
+   ],
+   "bank": 7,
+   "team_value": 983,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 29,
+   "chip": null,
+   "transfers": [
+    [
+     "Dijk",
+     "Gvardiol"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Betuncal",
+   "captain_points": 4,
+   "points": 25,
+   "bench_points": 0,
+   "expected": 57.48,
+   "autosubs": [],
+   "bank": 11,
+   "team_value": 983,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 30,
+   "chip": null,
+   "transfers": [
+    [
+     "Pickford",
+     "Martin"
+    ],
+    [
+     "Mbeumo",
+     "Sarr"
+    ],
+    [
+     "Cunha",
+     "Isak"
+    ]
+   ],
+   "hits": 2,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 6,
+   "points": 31,
+   "bench_points": 3,
+   "expected": 65.2,
+   "autosubs": [
+    [
+     "Kluivert",
+     "Kerkez"
+    ]
+   ],
+   "bank": 3,
+   "team_value": 983,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 31,
+   "chip": null,
+   "transfers": [
+    [
+     "Kluivert",
+     "Moura"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 4,
+   "points": 38,
+   "bench_points": 5,
+   "expected": 54.02,
+   "autosubs": [],
+   "bank": 2,
+   "team_value": 980,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 32,
+   "chip": null,
+   "transfers": [
+    [
+     "Jim\u00e9nez",
+     "Larsen"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Palmer",
+   "captain_points": 8,
+   "points": 58,
+   "bench_points": 14,
+   "expected": 67.38,
+   "autosubs": [],
+   "bank": 2,
+   "team_value": 981,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 33,
+   "chip": null,
+   "transfers": [
+    [
+     "Moura",
+     "D\u00edaz"
+    ],
+    [
+     "Isak",
+     "Marmoush"
+    ]
+   ],
+   "hits": 1,
+   "free_transfers": 1,
+   "captain": "Marmoush",
+   "captain_points": 8,
+   "points": 56,
+   "bench_points": 10,
+   "expected": 76.42,
+   "autosubs": [],
+   "bank": 5,
+   "team_value": 979,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 34,
+   "chip": null,
+   "transfers": [
+    [
+     "D\u00fabravka",
+     "Leno"
+    ],
+    [
+     "Mitchell",
+     "A\u00eft-Nouri"
+    ],
+    [
+     "Eze",
+     "Barnes"
+    ],
+    [
+     "Sarr",
+     "Murphy"
+    ]
+   ],
+   "hits": 3,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 16,
+   "points": 51,
+   "bench_points": 2,
+   "expected": 63.22,
+   "autosubs": [],
+   "bank": 5,
+   "team_value": 979,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 35,
+   "chip": null,
+   "transfers": [
+    [
+     "Kerkez",
+     "Burn"
+    ],
+    [
+     "Palmer",
+     "Mbeumo"
+    ],
+    [
+     "Betuncal",
+     "Wissa"
+    ]
+   ],
+   "hits": 2,
+   "free_transfers": 1,
+   "captain": "Barnes",
+   "captain_points": 4,
+   "points": 28,
+   "bench_points": 10,
+   "expected": 59.16,
+   "autosubs": [
+    [
+     "Larsen",
+     "Saseta"
+    ]
+   ],
+   "bank": 17,
+   "team_value": 977,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 36,
+   "chip": null,
+   "transfers": [
+    [
+     "D\u00edaz",
+     "Bowen"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 4,
+   "points": 48,
+   "bench_points": 5,
+   "expected": 58.87,
+   "autosubs": [],
+   "bank": 15,
+   "team_value": 978,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 37,
+   "chip": null,
+   "transfers": [
+    [
+     "Murphy",
+     "Rogers"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 4,
+   "points": 66,
+   "bench_points": 19,
+   "expected": 52.05,
+   "autosubs": [],
+   "bank": 10,
+   "team_value": 974,
+   "chip_gains": {}
+  },
+  {
+   "gameweek": 38,
+   "chip": null,
+   "transfers": [
+    [
+     "Larsen",
+     "Barbosa"
+    ]
+   ],
+   "hits": 0,
+   "free_transfers": 1,
+   "captain": "Salah",
+   "captain_points": 20,
+   "points": 57,
+   "bench_points": 20,
+   "expected": 56.57,
+   "autosubs": [],
+   "bank": 3,
+   "team_value": 974,
+   "chip_gains": {}
+  }
+ ]
+}

@@ -99,8 +99,12 @@ def test_hit_only_when_it_pays():
         players.append(Player(id=900 + k, name=f"Up{k}", team=10 + k, position=2, price=50, sell=50))
         for g in GWS:
             xp[(900 + k, g)] = 4 + gain
-    plan = solve(players, squad, xp, GWS, bank=0, free_transfers=1, settings=FAST)
+    trusting = Settings(time_limit=20, transfer_penalty=0.1, hit_margin=0)
+    plan = solve(players, squad, xp, GWS, bank=0, free_transfers=1, settings=trusting)
     assert len(plan.weeks[0].transfers) == 2 and plan.weeks[0].hits == 1  # +5 a week each beats −4
+    # With the default margin (a hit must win 6, not 4), the second move waits a week for a free transfer.
+    plan = solve(players, squad, xp, GWS, bank=0, free_transfers=1, settings=FAST)
+    assert [len(w.transfers) for w in plan.weeks[:2]] == [1, 1] and sum(w.hits for w in plan.weeks) == 0
 
     players, squad, xp = world()
     for k in range(2):

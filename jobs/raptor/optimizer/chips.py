@@ -20,9 +20,10 @@ from dataclasses import dataclass, field
 from raptor.optimizer.solve import CHIP_LABELS, CHIPS, Plan, Player, Settings, solve
 
 # Gain over the no-chip plan (expected points over the horizon) that a chip
-# must beat to be played. Calibrated on the 2025/26 backtest (jobs/backtest):
-# roughly the gain of the best ~10% of weeks for each chip.
-THRESHOLDS = {"wildcard": 12.0, "freehit": 10.0, "bboost": 10.0, "3xc": 9.0}
+# must beat to be played before it's about to expire. Tuned on a replay of
+# 2024/25 and checked on 2025/26 (jobs/backtest/REPORT.md): lower bars spent
+# chips on ordinary early weeks; these keep them for doubles and big swings.
+THRESHOLDS = {"wildcard": 18.0, "freehit": 15.0, "bboost": 15.0, "3xc": 13.5}
 
 # Used when bootstrap-static doesn't list chip windows.
 DEFAULT_WINDOWS = [

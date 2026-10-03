@@ -255,6 +255,10 @@ export default async function PlannerPage() {
         tentative: the plan is re-solved every 3 hours as predictions and news change. Expected points come from the FPL
         Raptor model ({data.model_version}).
       </p>
+      <p className="text-xs text-zinc-500">
+        Track record: a bot following this planner through all of 2025/26 scored 2,107 points, about rank 2.2 million.
+        Decent, not elite, and it can&apos;t read team news, so treat it as a second opinion.
+      </p>
       <Link href="/me" className="text-sm text-zinc-500 underline-offset-4 hover:underline">
         Back to My gameweek
       </Link>
