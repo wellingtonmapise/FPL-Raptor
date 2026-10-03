@@ -82,11 +82,11 @@ class FakeSession:
 
 
 def test_write_recap_falls_back_to_the_next_model():
-    session = FakeSession({"openai/gpt-4.1": 429, "openai/gpt-4o": "Big Week\n\nWords."})
-    assert write_recap({"x": 1}, "token", session) == ("openai/gpt-4o", "Big Week", "Words.")
-    assert session.calls == ["openai/gpt-4.1", "openai/gpt-4o"]
+    session = FakeSession({"gemini-flash-latest": 429, "gemini-2.5-flash": "Big Week\n\nWords."})
+    assert write_recap({"x": 1}, "token", session) == ("gemini-2.5-flash", "Big Week", "Words.")
+    assert session.calls == ["gemini-flash-latest", "gemini-2.5-flash"]
     with pytest.raises(RecapUnavailable, match="HTTP 429"):
-        write_recap({"x": 1}, "token", FakeSession({"openai/gpt-4.1": 429}))
+        write_recap({"x": 1}, "token", FakeSession({"gemini-flash-latest": 429}))
 
 
 def seed(fake_db):
@@ -103,9 +103,9 @@ def seed(fake_db):
 
 def test_run_writes_one_recap_per_league_per_gameweek(fake_db):
     seed(fake_db)
-    session = FakeSession({"openai/gpt-4.1": "Salah Saves the Banker\n\nRoast."})
+    session = FakeSession({"gemini-flash-latest": "Salah Saves the Banker\n\nRoast."})
     summary = run_recaps(fake_db, NOW, "token", session)
-    assert summary == "GW6 recap written for BiG ReD (openai/gpt-4.1): Salah Saves the Banker"
+    assert summary == "GW6 recap written for BiG ReD (gemini-flash-latest): Salah Saves the Banker"
     (row,) = fake_db.rows("recaps")
     assert row["league_id"] == 1086012 and row["gameweek_id"] == 6 and row["body"] == "Roast."
     assert run_recaps(fake_db, NOW, "token", session) == "GW6 recaps already written"
@@ -117,12 +117,12 @@ def test_run_waits_for_final_points_and_needs_a_token(fake_db):
     for e in fake_db.rows("entry_gameweeks")[:2]:
         e["final"] = False
     assert run_recaps(fake_db, NOW, "token", FakeSession({})) == "waiting for final points in BiG ReD"
-    assert run_recaps(fake_db, NOW, None).startswith("recaps skipped (no GITHUB_TOKEN")
+    assert run_recaps(fake_db, NOW, None) == "recaps skipped (no GEMINI_API_KEY secret)"
 
 
 def test_run_reports_model_failures_and_skips_before_the_migration(fake_db):
     seed(fake_db)
-    assert run_recaps(fake_db, NOW, "token", FakeSession({})).startswith("failed: BiG ReD: openai/gpt-4.1: HTTP 404")
+    assert run_recaps(fake_db, NOW, "token", FakeSession({})).startswith("failed: BiG ReD: gemini-flash-latest: HTTP 404")
 
     original = fake_db.select
 

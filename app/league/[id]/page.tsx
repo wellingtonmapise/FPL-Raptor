@@ -207,8 +207,8 @@ export default async function LeaguePage({
               ))}
           </div>
           <p className="mt-3 text-xs text-zinc-500">
-            Written by AI ({recap.model.replace(/^openai\//, "")} on GitHub Models) from the gameweek&apos;s
-            numbers, in full roast mode. It only knows the stats, so don&apos;t take it personally.
+            Written by AI ({recap.model}) from the gameweek&apos;s numbers, in full roast mode. It only knows
+            the stats, so don&apos;t take it personally.
           </p>
         </section>
       )}

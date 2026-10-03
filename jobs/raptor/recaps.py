@@ -4,12 +4,14 @@
 
 Runs after every fetch. Once a gameweek's points are final, it gathers each
 league's facts (scores, captains, chips, hits, benches, who moved where),
-asks a model on GitHub Models to write a roast in the voice of a football
-pundit, and saves it to `recaps`. The alerts job pushes it to the league.
+asks Google's Gemini to write a roast in the voice of a football pundit, and
+saves it to `recaps`. The alerts job pushes it to the league.
 
-GitHub Models is free for personal accounts (rate-limited) and needs no key:
-the workflow's own GITHUB_TOKEN, with `models: read` permission, is enough.
-The model only sees the facts given here and is told not to invent any.
+Gemini's API has a free tier (Flash models, rate-limited, no card): the key
+comes from Google AI Studio and lives in the GEMINI_API_KEY repository
+secret. The model only sees the facts given here and is told not to invent
+any. On the free tier Google may use prompts to improve its models; they
+hold first names and FPL numbers, nothing else.
 """
 
 from __future__ import annotations
@@ -31,9 +33,10 @@ log = logging.getLogger("raptor.recaps")
 
 JOB_NAME = "recaps"
 MIGRATION = "supabase/migrations/20261003000003_scout_and_recaps.sql"
-ENDPOINT = "https://models.github.ai/inference/chat/completions"
-# Tried in order; the next is used if one is unavailable or rate-limited.
-MODELS = ("openai/gpt-4.1", "openai/gpt-4o", "openai/gpt-4.1-mini")
+# Gemini's OpenAI-compatible endpoint.
+ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+# Free-tier models, tried in order; the next is used if one is unavailable or rate-limited.
+MODELS = ("gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite")
 COVERAGE = 0.75  # share of the league's squads with final points before writing
 CHIP_NAMES = {"wildcard": "Wildcard", "freehit": "Free Hit", "bboost": "Bench Boost", "3xc": "Triple Captain", "manager": "Assistant Manager"}
 
@@ -157,12 +160,7 @@ def write_recap(facts: dict, token: str, session: requests.Session | None = None
         try:
             resp = session.post(
                 ENDPOINT,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                    "Content-Type": "application/json",
-                },
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                 json={
                     "model": model,
                     "messages": [
@@ -170,7 +168,7 @@ def write_recap(facts: dict, token: str, session: requests.Session | None = None
                         {"role": "user", "content": "This week's facts:\n" + json.dumps(facts, ensure_ascii=False, indent=1)},
                     ],
                     "temperature": 0.9,
-                    "max_tokens": 700,
+                    "max_tokens": 4000,  # room for the model's thinking as well as the recap
                 },
                 timeout=90,
             )
@@ -211,7 +209,7 @@ def run_recaps(db: Database, now: datetime, token: str | None, session: requests
     if not leagues:
         return f"GW{gw} recaps already written"
     if not token:
-        return "recaps skipped (no GITHUB_TOKEN; runs on GitHub Actions)"
+        return "recaps skipped (no GEMINI_API_KEY secret)"
 
     written, waiting, failed = [], [], []
     for league in leagues:
@@ -269,7 +267,7 @@ def main() -> int:
     run = db.insert("job_runs", [{"job": JOB_NAME}], returning=True)[0]
     run_filter = {"id": f"eq.{run['id']}"}
     try:
-        summary = run_recaps(db, datetime.now(timezone.utc), os.environ.get("GITHUB_TOKEN"))
+        summary = run_recaps(db, datetime.now(timezone.utc), os.environ.get("GEMINI_API_KEY", "").strip() or None)
     except Exception as exc:
         db.update("job_runs", {"status": "failed", "finished_at": utc_now(), "detail": f"{type(exc).__name__}: {exc}"[:500]}, run_filter)
         announce("error", "Recaps failed", f"{type(exc).__name__}: {exc}")

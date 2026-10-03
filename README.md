@@ -200,15 +200,17 @@ league's results last season, or a sample of (points, rank) pairs across the gam
 
 Once a gameweek's points are final, `raptor.recaps` (after each fetch) gathers each followed
 league's facts (scores, captains, hits, chips, benches, movement, players only one manager had) and
-asks a model on [GitHub Models](https://docs.github.com/en/github-models) to write a short roast in
-the voice of a football pundit. The League page shows it and the alerts job pushes it.
+asks Google's Gemini to write a short roast in the voice of a football pundit. The League page
+shows it and the alerts job pushes it.
 
-- **Free:** GitHub Models is free (rate-limited) for personal accounts, and the workflow's own
-  `GITHUB_TOKEN` is the key (`permissions: models: read` in fetch.yml). It tries gpt-4.1, then
-  gpt-4o, then gpt-4.1-mini.
+- **Free:** Gemini's API has a free tier for its Flash models (rate-limited, no card). Create a key
+  at [Google AI Studio](https://aistudio.google.com/apikey) and add it as the `GEMINI_API_KEY`
+  repository secret (same place as the Supabase secrets). Without it, recaps are skipped.
 - The model only sees the gameweek's numbers and first names, and is told not to invent anything
-  and to roast FPL decisions, never people. The facts go to GitHub Models to write the recap.
-- To turn recaps off, delete the "Write gameweek recaps" step in `.github/workflows/fetch.yml`.
+  and to roast FPL decisions, never people. On the free tier Google may use prompts to improve its
+  models.
+- To turn recaps off, delete the secret (or the "Write gameweek recaps" step in
+  `.github/workflows/fetch.yml`).
 
 ## Live scores
 
@@ -253,7 +255,7 @@ Things worth knowing about FPL's data:
 - **Fetch summary says "player points skipped":** run `supabase/migrations/20261003000001_player_gameweeks.sql` in the SQL Editor. Captain awards appear after the next fetch.
 - **Fetch summary says "plans skipped":** run `supabase/migrations/20261003000002_transfer_plans.sql` in the SQL Editor. Plans appear after the next fetch.
 - **Fetch summary says "scout stats skipped" or "recaps skipped (run ...)":** run `supabase/migrations/20261003000003_scout_and_recaps.sql` in the SQL Editor.
-- **Recaps show "failed: ... HTTP 429" or "HTTP 403":** 429 is GitHub Models' rate limit (it tries again on the next fetch); 403 means the workflow lacks `models: read` permission.
+- **Recaps show "failed: ... HTTP 429":** Gemini's free-tier rate limit; the next fetch tries again. **HTTP 400/401/403** usually means the `GEMINI_API_KEY` secret is wrong.
 - **Live says FPL isn't answering:** FPL's API goes quiet for a while around deadlines and while it updates; try again in a minute.
 - **Planner says your first plan appears after the next update:** the plan is made by the scheduled fetch (every 3 hours). Run **Fetch FPL data** by hand to get one now.
 - **League page says none of your leagues are followed:** add the league's id to `FPL_LEAGUE_IDS` in `.github/workflows/fetch.yml`.

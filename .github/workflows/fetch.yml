@@ -5,6 +5,7 @@
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions):
 #   SUPABASE_URL         e.g. https://abcd1234.supabase.co
 #   SUPABASE_SECRET_KEY  the secret key (sb_secret_...) from Supabase -> Project Settings -> API Keys
+# and, for the AI recaps, GEMINI_API_KEY (free, from Google AI Studio).
 #
 # Run it by hand any time: Actions -> Fetch FPL data -> Run workflow.
 #
@@ -22,7 +23,6 @@ on:
 
 permissions:
   contents: read
-  models: read # GitHub Models, for the AI gameweek recaps (free, no key needed)
 
 # Never run two fetches at once.
 concurrency:
@@ -64,5 +64,5 @@ jobs:
       - name: Write gameweek recaps (once a gameweek is final)
         if: ${{ !cancelled() }} # even if planning failed
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # free key from Google AI Studio; skipped if missing
         run: uv run --no-dev python -m raptor.recaps
