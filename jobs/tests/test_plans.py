@@ -75,6 +75,8 @@ def test_plan_saved_for_each_user(fake_db):
     assert first["captain"]["name"] == star["web_name"]
     assert len(first["lineup"]) == 11 and len(first["bench"]) == 4
     assert row["expected_points"] > row["baseline_points"]
+    assert len(row["plan"]["squad"]) == 15 and all(p["sell"] for p in row["plan"]["squad"])
+    assert {c["chip"] for c in row["plan"]["chips_left"]} == {"wildcard", "freehit", "bboost", "3xc"}
     chips = {c["chip"]: c for c in row["plan"]["chips"]}
     assert set(chips) == {"wildcard", "freehit", "bboost", "3xc"}  # none used yet, all in the GW1-19 window
     assert all(c["expires"] == 19 and set(c["by_week"]) == {"6", "7", "8", "9"} for c in chips.values())

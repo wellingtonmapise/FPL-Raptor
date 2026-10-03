@@ -20,7 +20,7 @@ export type PitchPlayer = {
   badge?: "C" | "V" | "TC" | null;
   alert?: "doubtful" | "out" | null;
   dim?: boolean; // subbed off, not playing, benched
-  ring?: "in" | "sub" | null; // a new signing / came on as a sub
+  ring?: "in" | "sub" | "pick" | null; // a new signing / came on as a sub / can be picked now
   live?: boolean; // playing right now
   note?: string; // read out by screen readers, e.g. "subbed on"
 };

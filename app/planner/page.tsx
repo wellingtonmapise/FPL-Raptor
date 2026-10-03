@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import DraftPlanner from "@/components/DraftPlanner";
 import PlanWeeks from "@/components/PlanWeeks";
 import { formatPrice } from "@/lib/fpl";
 import {
@@ -13,6 +14,7 @@ import {
   type ChipOption,
   type TransferPlanRow,
 } from "@/lib/plan";
+import { loadDraftData } from "@/lib/draftData";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Transfer plan · FPL Raptor" };
@@ -98,10 +100,26 @@ function ChipsCard({ row }: { row: TransferPlanRow }) {
   );
 }
 
-export default async function PlannerPage() {
+function ModeTabs({ build }: { build: boolean }) {
+  const tab = (on: boolean) =>
+    `flex-1 rounded-lg py-1.5 text-center text-sm font-medium ${on ? "bg-white shadow-sm dark:bg-zinc-800" : "text-zinc-600 dark:text-zinc-400"}`;
+  return (
+    <nav className="flex gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900" aria-label="Planner views">
+      <Link href="/planner" aria-current={!build ? "page" : undefined} className={tab(!build)}>
+        Suggested plan
+      </Link>
+      <Link href="/planner?mode=build" aria-current={build ? "page" : undefined} className={tab(build)}>
+        Build your own
+      </Link>
+    </nav>
+  );
+}
+
+export default async function PlannerPage({ searchParams }: PageProps<"/planner">) {
   const supabase = await createClient();
   const userId = await currentUserId(supabase);
   if (!userId) redirect("/login?next=/planner");
+  const build = (await searchParams).mode === "build";
 
   const [{ data }, { data: teamRows }] = await Promise.all([
     supabase
@@ -113,10 +131,28 @@ export default async function PlannerPage() {
   ]);
   const clubs = Object.fromEntries(((teamRows ?? []) as { id: number; short_name: string }[]).map((t) => [t.id, t.short_name]));
 
+  if (build) {
+    const loaded = await loadDraftData(supabase, userId, data);
+    return (
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-8">
+        <h1 className="text-2xl font-bold tracking-tight">Planner</h1>
+        <ModeTabs build />
+        {loaded.ok ? (
+          <DraftPlanner {...loaded.data} />
+        ) : (
+          <Card>
+            <p className="text-zinc-600 dark:text-zinc-400">{loaded.reason}</p>
+          </Card>
+        )}
+      </main>
+    );
+  }
+
   if (!data) {
     return (
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
-        <h1 className="text-2xl font-bold tracking-tight">Transfer plan</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Planner</h1>
+        <ModeTabs build={false} />
         <Card>
           <p className="text-zinc-600 dark:text-zinc-400">
             Your first plan appears after the next update, within about 3 hours of linking your team.
@@ -133,12 +169,13 @@ export default async function PlannerPage() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">Transfer plan</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Planner</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           {gameweekRange(data)} · {data.free_transfers} free transfer{data.free_transfers === 1 ? "" : "s"} ·{" "}
           {formatPrice(data.bank)} in the bank
         </p>
       </header>
+      <ModeTabs build={false} />
 
       <Card title={`Before the GW${data.from_gameweek} deadline`}>
         {top.chip && (

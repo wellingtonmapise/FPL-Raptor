@@ -97,7 +97,7 @@ def plan_json(plan: Plan, xp: dict[tuple[int, int], float], chips: ChipPlan | No
 
 
 def plan_for_team(fpl: FplClient, db: Database, team_id: int, bootstrap: dict, current_gw: int,
-                  gameweeks: list[int], xp: dict[tuple[int, int], float]) -> tuple[ChipPlan, int, int]:
+                  gameweeks: list[int], xp: dict[tuple[int, int], float]) -> tuple[ChipPlan, int, int, dict]:
     history = fpl.entry_history(team_id) or {}
     transfers = fpl.entry_transfers(team_id)
     squad = current_squad(db, fpl, team_id, current_gw)
@@ -118,8 +118,17 @@ def plan_for_team(fpl: FplClient, db: Database, team_id: int, bootstrap: dict, c
     ]
     ft, money = free_transfers(history), bank(history)
     pool = candidate_pool(players, squad, xp, gameweeks)
-    chips = available_chips(history, chip_windows(bootstrap), gameweeks)
-    return plan_with_chips(pool, squad, xp, gameweeks, money, ft, chips), ft, money
+    windows = chip_windows(bootstrap)
+    chips = available_chips(history, windows, gameweeks)
+    # For the do-it-yourself planner: the squad's selling prices and every chip still unused.
+    extras = {
+        "squad": [{"id": p.id, "sell": p.sell} for p in players if p.id in squad],
+        "chips_left": [
+            {"chip": c.chip, "from": min(c.weeks), "expires": c.expires}
+            for c in available_chips(history, windows, list(range(gameweeks[0], 39)))
+        ],
+    }
+    return plan_with_chips(pool, squad, xp, gameweeks, money, ft, chips), ft, money, extras
 
 
 def describe_first_week(plan: Plan) -> str:
@@ -153,7 +162,7 @@ def run_plans(fpl: FplClient, db: Database, now: datetime) -> str:
     for profile in profiles:
         team = profile["fpl_team_id"]
         try:
-            chips, ft, money = plan_for_team(fpl, db, team, bootstrap, current["id"], upcoming, xp)
+            chips, ft, money, extras = plan_for_team(fpl, db, team, bootstrap, current["id"], upcoming, xp)
             plan = chips.plan
         except FplUnavailable:
             raise
@@ -168,7 +177,7 @@ def run_plans(fpl: FplClient, db: Database, now: datetime) -> str:
             "horizon": len(upcoming),
             "free_transfers": ft,
             "bank": money,
-            "plan": plan_json(plan, xp, chips),
+            "plan": {**plan_json(plan, xp, chips), **extras},
             "expected_points": round(plan.expected_points, 2),
             "baseline_points": round(plan.baseline_points, 2),
             "model_version": meta["version"],

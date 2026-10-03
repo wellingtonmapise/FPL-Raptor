@@ -32,7 +32,7 @@ Everything runs on free tiers: Vercel (web app), Supabase (database and sign-in)
 ### 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com) (sign in with GitHub, pick a US East region).
-2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql`, `20261003000002_transfer_plans.sql` and `20261003000003_scout_and_recaps.sql`.
+2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql`, `20261003000002_transfer_plans.sql`, `20261003000003_scout_and_recaps.sql` and `20261003000004_planner_drafts.sql`.
 3. From **Project Settings → API Keys** (or the **Connect** button), note three values:
    - the project URL, like `https://abcd1234.supabase.co`
    - the **publishable key** (`sb_publishable_...`): for the web app; safe to expose
@@ -73,7 +73,7 @@ To make a new pair: `npx web-push generate-vapid-keys`. Put the private key in b
 2. Paste your FPL team ID (the number after `/entry/` on your Points page) or the whole Points link.
 3. **Team** (My gameweek) shows your deadline countdown, your team on a pitch (club-colour shirts with each player's expected points on the shirt and next fixture underneath; a list view too), flagged players with FPL's injury news, the model's captain pick and a transfer suggestion, and last gameweek's points, bank and team value. Tap any player, anywhere in the app, for their card: price, availability, form, ownership, the next five fixtures with expected points, the last five results and underlying stats.
 4. **Live** shows your points as matches happen: provisional bonus, projected automatic subs, the vice-captain taking over if needed, and your league's live table. It refreshes every minute while matches are on.
-5. **Planner** shows the full plan for the next four gameweeks, a tab per week: what to sell and buy, whether a hit is worth it, which chips to play when (or save), and the team on a pitch with new signings ringed.
+5. **Planner** shows the full plan for the next four gameweeks, a tab per week: what to sell and buy, whether a hit is worth it, which chips to play when (or save), and the team on a pitch with new signings ringed. **Build your own** lets you plan the next five gameweeks yourself: tap a player to transfer them (affordable replacements, best outlook first), captain them or swap them with the bench, play chips, and see your expected points against keeping your team and against the bot's plan, with undo. Start from your team or the bot's plan, and save up to five drafts to your account.
 6. **Scout** has a fixture ticker (every club's next 3 or 6 gameweeks by difficulty), underlying stats (xP, xGI/90, xG, xA, defensive contributions, for the season or the last six gameweeks) and differentials (good picks almost nobody in your league has).
 7. **League** shows each followed mini-league you're in: the AI recap of the last gameweek, the table with movement, your closest rival (what they start that you don't, and their captain), the week's awards, everyone's captains, and who owns whom (the template, your differentials, and threats you don't own).
 8. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
@@ -234,6 +234,7 @@ if the fetch hasn't stored them yet.
 | `transfer_plans` | Each user's four-week transfer and chip plan and the no-transfer baseline (only they can read it) | After every fetch, by the planner |
 | `player_stats` | Season and last-six-gameweek stats and the model's next 1 and 5 gameweeks, for Scout | After every fetch, by the prediction job |
 | `recaps` | Each league's AI recap per gameweek | Once per gameweek, after its points are final |
+| `planner_drafts` | Saved do-it-yourself plans: a list of moves (only the owner can see them) | By the app, from Build your own |
 | `profiles` | Each user's FPL team id and name | By the app, at onboarding |
 | `notification_prefs`, `push_subscriptions` | Which alerts each user wants; their devices | By the app, on the Notifications page |
 | `notifications_sent` | Every alert sent, so none goes out twice | By the alerts job |

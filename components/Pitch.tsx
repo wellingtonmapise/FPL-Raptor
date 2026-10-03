@@ -21,7 +21,7 @@ const TONES: Record<Tone, string> = {
   muted: "bg-zinc-600/90 text-zinc-100",
 };
 
-function Slot({ p, compact = false }: { p: PitchPlayer; compact?: boolean }) {
+function Slot({ p, compact = false, onSelect }: { p: PitchPlayer; compact?: boolean; onSelect?: (id: number) => void }) {
   const { open } = usePlayerSheet();
   const label = [p.name, p.caption, p.badge === "C" ? "captain" : p.badge === "TC" ? "triple captain" : p.badge === "V" ? "vice-captain" : null, p.alert === "out" ? "unavailable" : p.alert === "doubtful" ? "doubtful" : null, p.note]
     .filter(Boolean)
@@ -29,7 +29,7 @@ function Slot({ p, compact = false }: { p: PitchPlayer; compact?: boolean }) {
   return (
     <button
       type="button"
-      onClick={() => open(p.id)}
+      onClick={() => (onSelect ? onSelect(p.id) : open(p.id))}
       aria-label={label}
       className={`group flex w-[19%] max-w-[76px] min-w-0 flex-col items-center rounded-lg pt-1 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white ${
         p.dim ? "opacity-55" : ""
@@ -67,7 +67,13 @@ function Slot({ p, compact = false }: { p: PitchPlayer; compact?: boolean }) {
       </span>
       <span
         className={`mt-0.5 w-full overflow-hidden rounded-[5px] text-center leading-tight shadow-sm ${
-          p.ring === "in" ? "ring-2 ring-emerald-300" : p.ring === "sub" ? "ring-2 ring-sky-300" : ""
+          p.ring === "in"
+            ? "ring-2 ring-emerald-300"
+            : p.ring === "sub"
+              ? "ring-2 ring-sky-300"
+              : p.ring === "pick"
+                ? "ring-[3px] ring-amber-300 motion-safe:animate-pulse"
+                : ""
         }`}
       >
         <span className="block truncate bg-white px-1 py-[3px] text-[11px] font-semibold text-zinc-900">{p.name}</span>
@@ -77,7 +83,17 @@ function Slot({ p, compact = false }: { p: PitchPlayer; compact?: boolean }) {
   );
 }
 
-export default function Pitch({ starters, bench, benchNote }: { starters: PitchPlayer[]; bench: PitchPlayer[]; benchNote?: string }) {
+export default function Pitch({
+  starters,
+  bench,
+  benchNote,
+  onSelect,
+}: {
+  starters: PitchPlayer[];
+  bench: PitchPlayer[];
+  benchNote?: string;
+  onSelect?: (id: number) => void; // instead of opening the player card
+}) {
   const rows = [1, 2, 3, 4].map((pos) => starters.filter((p) => p.position === pos));
   return (
     <div className="overflow-hidden rounded-2xl shadow-sm ring-1 ring-black/5 dark:ring-white/10">
@@ -99,7 +115,7 @@ export default function Pitch({ starters, bench, benchNote }: { starters: PitchP
           {rows.map((row, i) => (
             <div key={i} className="flex justify-center gap-[2%]">
               {row.map((p) => (
-                <Slot key={p.id} p={p} />
+                <Slot key={p.id} p={p} onSelect={onSelect} />
               ))}
             </div>
           ))}
@@ -113,7 +129,7 @@ export default function Pitch({ starters, bench, benchNote }: { starters: PitchP
           </div>
           <div className="flex justify-center gap-[2%]">
             {bench.map((p) => (
-              <Slot key={p.id} p={p} compact />
+              <Slot key={p.id} p={p} compact onSelect={onSelect} />
             ))}
           </div>
         </div>
