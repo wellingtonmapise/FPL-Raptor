@@ -1,0 +1,36 @@
+name: Season backtest data
+
+# Manual only: fetches the followed league's results from last season, which
+# the season backtest (jobs/raptor/backtest) compares against.
+on:
+  workflow_dispatch:
+    inputs:
+      league:
+        description: League id
+        default: "1086012"
+      season:
+        description: Season, as FPL names it
+        default: "2025/26"
+
+permissions:
+  contents: read
+
+jobs:
+  actuals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          working-directory: jobs
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      - name: League results last season
+        env:
+          LEAGUE: ${{ inputs.league }}
+          SEASON: ${{ inputs.season }}
+        run: uv run --no-dev python -m raptor.backtest.actuals "$LEAGUE" "$SEASON"
