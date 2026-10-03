@@ -14,6 +14,7 @@ Each run:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -95,9 +96,10 @@ def sync_picks(fpl: FplClient, db: Database, bootstrap: dict, team_ids: set[int]
     A squad is fetched again every run until FPL marks its gameweek as
     final (finished and data_checked), so points end up correct. After that
     it's skipped, which keeps requests to FPL low.
+
+    Returns counts per gameweek, so the run summary says exactly what happened.
     """
-    squads = 0
-    gameweek_ids: list[int] = []
+    per_gameweek: list[dict] = []
     for gameweek in gameweeks_to_refresh(bootstrap):
         gw_id = gameweek["id"]
         final = bool(gameweek.get("finished") and gameweek.get("data_checked"))
@@ -109,9 +111,11 @@ def sync_picks(fpl: FplClient, db: Database, bootstrap: dict, team_ids: set[int]
         }
         entry_rows: list[dict] = []
         pick_rows: list[dict] = []
+        missing = 0
         for team_id in sorted(team_ids - done):
             data = fpl.picks(team_id, gw_id)
             if data is None:  # e.g. the manager joined after this gameweek
+                missing += 1
                 continue
             entry_row, picks = parse_picks(team_id, gw_id, data, final, now)
             entry_rows.append(entry_row)
@@ -119,10 +123,32 @@ def sync_picks(fpl: FplClient, db: Database, bootstrap: dict, team_ids: set[int]
             time.sleep(fpl.polite_delay_seconds)
         db.upsert("entry_gameweeks", entry_rows, on_conflict="team_id,gameweek_id")
         db.upsert("picks", pick_rows, on_conflict="team_id,gameweek_id,player_id")
-        squads += len(entry_rows)
-        if entry_rows:
-            gameweek_ids.append(gw_id)
-    return {"squads": squads, "gameweeks": gameweek_ids}
+        per_gameweek.append(
+            {"id": gw_id, "saved": len(entry_rows), "missing": missing, "already_final": len(team_ids & done)}
+        )
+    return {
+        "tracked": len(team_ids),
+        "squads": sum(g["saved"] for g in per_gameweek),
+        "per_gameweek": per_gameweek,
+    }
+
+
+def describe_picks(picks: dict, fpl: FplClient) -> str:
+    """'squads for 18 managers (GW5: 18 saved)', plus why when FPL refused."""
+    if picks["tracked"] == 0:
+        return "squads: no managers tracked yet"
+    parts = []
+    for g in picks["per_gameweek"]:
+        bits = [f"{g['saved']} saved"]
+        if g["already_final"]:
+            bits.append(f"{g['already_final']} already final")
+        if g["missing"]:
+            bits.append(f"{g['missing']} not found")
+        parts.append(f"GW{g['id']}: " + ", ".join(bits))
+    text = f"squads for {picks['tracked']} managers ({'; '.join(parts) or 'no gameweeks'})"
+    if picks["squads"] == 0 and getattr(fpl, "last_not_found", None):
+        text += f" · FPL said {fpl.last_not_found}"
+    return text
 
 
 def run_once(fpl: FplClient, db: Database, settings: Settings) -> str:
@@ -131,13 +157,19 @@ def run_once(fpl: FplClient, db: Database, settings: Settings) -> str:
     static = sync_static(fpl, db, bootstrap, now)
     leagues = sync_leagues(fpl, db, settings.league_ids, now)
     picks = sync_picks(fpl, db, bootstrap, tracked_team_ids(db), now)
-    gws = ", ".join(f"GW{g}" for g in picks["gameweeks"]) or "none needed"
     return (
         f"players {static['players']} ({static['changes']} changes), "
         f"fixtures {static['fixtures']}, "
         f"leagues {leagues['leagues']} ({leagues['managers']} managers), "
-        f"squads {picks['squads']} ({gws})"
+        + describe_picks(picks, fpl)
     )
+
+
+def announce(level: str, title: str, message: str) -> None:
+    """Show a message on the GitHub Actions run page (no-op elsewhere)."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::{level} title={title}::{escaped}", flush=True)
 
 
 def main() -> int:
@@ -152,6 +184,7 @@ def main() -> int:
         summary = run_once(fpl, db, settings)
     except FplUnavailable as exc:
         log.warning("FPL unavailable, skipping this run: %s", exc)
+        announce("warning", "FPL unavailable, run skipped", str(exc))
         db.update("job_runs", {"status": "skipped", "finished_at": utc_now(), "detail": str(exc)[:500]}, run_filter)
         return 0
     except Exception as exc:
@@ -160,9 +193,11 @@ def main() -> int:
             {"status": "failed", "finished_at": utc_now(), "detail": f"{type(exc).__name__}: {exc}"[:500]},
             run_filter,
         )
+        announce("error", "Fetch failed", f"{type(exc).__name__}: {exc}")
         raise
     db.update("job_runs", {"status": "ok", "finished_at": utc_now(), "detail": summary}, run_filter)
     log.info("Done: %s", summary)
+    announce("notice", "Fetch summary", summary)
     return 0
 
 

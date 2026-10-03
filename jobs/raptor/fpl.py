@@ -44,6 +44,8 @@ class FplClient:
         self.retries = retries
         self.backoff_seconds = backoff_seconds
         self.polite_delay_seconds = polite_delay_seconds
+        # The most recent 404, so a run summary can say what FPL replied.
+        self.last_not_found: str | None = None
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any | None:
         """GET a path under the API. Returns parsed JSON, or None on 404.
@@ -60,6 +62,7 @@ class FplClient:
                 last_problem = f"{type(exc).__name__}: {exc}"
             else:
                 if resp.status_code == 404:
+                    self.last_not_found = f"404 on {path}: {resp.text[:120]!r}"
                     return None
                 if resp.status_code < 400:
                     return resp.json()

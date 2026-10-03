@@ -25,7 +25,7 @@ def test_first_run_fills_every_table(fake_fpl, fake_db):
     assert len(fake_db.rows("entry_gameweeks")) == 6
     assert len(fake_db.rows("picks")) == 6 * 4
     assert "players 4 (0 changes)" in summary
-    assert "squads 6 (GW4, GW5)" in summary
+    assert "squads for 3 managers (GW4: 3 saved; GW5: 3 saved)" in summary
 
 
 def test_final_gameweek_marked_and_not_refetched(fake_fpl, fake_db):
@@ -35,9 +35,10 @@ def test_final_gameweek_marked_and_not_refetched(fake_fpl, fake_db):
     assert entries[(1001, 5)]["final"] is False  # GW5 points not confirmed yet
 
     fake_fpl.picks_calls.clear()
-    run_once(fake_fpl, fake_db, SETTINGS)
+    summary = run_once(fake_fpl, fake_db, SETTINGS)
     # Only the unconfirmed gameweek is fetched again.
     assert sorted(fake_fpl.picks_calls) == [(1001, 5), (1002, 5), (1003, 5)]
+    assert "GW4: 0 saved, 3 already final" in summary
 
 
 def test_second_run_records_player_changes(fake_fpl, fake_db):
@@ -66,3 +67,12 @@ def test_unknown_league_is_skipped(fake_fpl, fake_db):
     summary = run_once(fake_fpl, fake_db, settings)
     assert fake_db.rows("leagues") == []
     assert "leagues 0 (0 managers)" in summary
+    assert "squads: no managers tracked yet" in summary
+
+
+def test_summary_explains_when_fpl_returns_no_squads(fake_fpl, fake_db):
+    fake_fpl.picks = lambda team_id, gameweek_id: None
+    fake_fpl.last_not_found = "404 on entry/1001/event/5/picks/: 'Not found'"
+    summary = run_once(fake_fpl, fake_db, SETTINGS)
+    assert "squads for 3 managers (GW4: 0 saved, 3 not found; GW5: 0 saved, 3 not found)" in summary
+    assert "FPL said 404 on entry/1001/event/5/picks/" in summary
