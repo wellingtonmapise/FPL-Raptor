@@ -193,3 +193,25 @@ def test_deadline_reminder_includes_the_models_captain(db):
     run_alerts(db, sender, NOW)
     # Timber has the highest xP but is on the bench, so the pick is Haaland (newest run).
     assert sender.sent[0]["payload"]["body"].endswith("Model's pick: Haaland (7.8 xP).")
+
+
+def test_deadline_reminder_includes_the_transfer_plan(db):
+    db.rows("transfer_plans").append(
+        {
+            "user_id": USER,
+            "from_gameweek": 6,
+            "expected_points": 210.4,
+            "baseline_points": 201.2,
+            "plan": {"weeks": [{"gameweek": 6, "hits": 0, "transfers": [{"out": {"name": "Palmer"}, "in": {"name": "Saka"}}]}]},
+        }
+    )
+    sender = RecordingSender()
+    run_alerts(db, sender, NOW)
+    assert sender.sent[0]["payload"]["body"].endswith("Plan: Palmer → Saka, +9.2 xP.")
+
+
+def test_transfer_idea_rolls_small_gains():
+    from raptor.alerts import transfer_idea
+
+    row = {"expected_points": 201.5, "baseline_points": 201.2, "plan": {"weeks": [{"transfers": [{"out": {"name": "A"}, "in": {"name": "B"}}]}]}}
+    assert transfer_idea(row) == "Plan: roll your transfer."

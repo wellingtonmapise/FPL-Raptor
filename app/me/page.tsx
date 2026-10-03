@@ -18,6 +18,7 @@ import {
   type PredictionRow,
   type Team,
 } from "@/lib/gameweek";
+import { gameweekRange, headline, type TransferPlanRow } from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
 
@@ -124,7 +125,7 @@ export default async function MyGameweekPage() {
   }
 
   const playerIds = picks.map((p) => p.player_id);
-  const [playersRes, fixturesRes, predictionsRes] = await Promise.all([
+  const [playersRes, fixturesRes, predictionsRes, planRes] = await Promise.all([
     picks.length
       ? supabase.from("players").select(PLAYER_COLUMNS).in("id", playerIds)
       : Promise.resolve({ data: [] }),
@@ -141,6 +142,11 @@ export default async function MyGameweekPage() {
           .eq("gameweek_id", next.id)
           .in("player_id", playerIds)
       : Promise.resolve({ data: [] }),
+    supabase
+      .from("transfer_plans")
+      .select("from_gameweek,horizon,free_transfers,bank,plan,expected_points,baseline_points,model_version,created_at")
+      .eq("user_id", userId)
+      .maybeSingle<TransferPlanRow>(),
   ]);
   const squad = buildSquad(
     picks,
@@ -151,6 +157,9 @@ export default async function MyGameweekPage() {
   const xp = latestPredictions((predictionsRes.data ?? []) as PredictionRow[]);
   const captains = captainOptions(squad.starters, xp).slice(0, 3);
   const xiTotal = expectedXI(squad.starters, xp);
+  // Only show a plan made for the coming deadline (and none until the table exists).
+  const plan = planRes.data && next && planRes.data.from_gameweek === next.id ? planRes.data : null;
+  const suggestion = plan ? headline(plan) : null;
 
   const teamName = entry.ok ? entry.data.name : null;
   const managerName = entry.ok
@@ -245,6 +254,25 @@ export default async function MyGameweekPage() {
         </Card>
       )}
 
+      {plan && suggestion && (
+        <Card title="Transfer suggestion">
+          <p className="text-lg font-semibold">
+            {suggestion.kind === "move" ? suggestion.moves : "Roll your transfer"}
+          </p>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            {suggestion.kind === "move"
+              ? `${suggestion.hits ? `Worth a −${4 * suggestion.hits} hit. ` : ""}+${suggestion.gain.toFixed(1)} xP over ${gameweekRange(plan)} vs keeping your team.`
+              : `Nothing gains more than a point over ${gameweekRange(plan)}. You have ${plan.free_transfers} free transfer${plan.free_transfers === 1 ? "" : "s"}.`}
+          </p>
+          <Link
+            href="/planner"
+            className="mt-3 inline-block text-sm font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
+          >
+            See the full plan →
+          </Link>
+        </Card>
+      )}
+
       {stats && current && (
         <Card title={`${current.name}${stats.active_chip ? ` · ${CHIP_NAMES[stats.active_chip] ?? stats.active_chip}` : ""}`}>
           <div className="grid grid-cols-3 gap-4">
@@ -292,6 +320,9 @@ export default async function MyGameweekPage() {
 
       <div className="flex items-center justify-between text-sm">
         <div className="flex gap-4">
+          <Link href="/planner" className="text-zinc-500 underline-offset-4 hover:underline">
+            Planner
+          </Link>
           <Link href="/notifications" className="text-zinc-500 underline-offset-4 hover:underline">
             Notifications
           </Link>

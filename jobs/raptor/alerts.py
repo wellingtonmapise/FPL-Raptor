@@ -73,8 +73,9 @@ def deadline_message(
     last_call: bool,
     squad: list[dict] | None,
     suggestion: tuple[str, float] | None = None,
+    transfer_idea: str | None = None,
 ) -> dict:
-    """suggestion: the model's captain pick for this gameweek, (name, expected points)."""
+    """suggestion: the model's captain pick, (name, xP). transfer_idea: from the user's plan."""
     title = f"GW{gameweek_id} deadline in {time_left(seconds_left)}"
     lines = []
     if squad:
@@ -86,6 +87,8 @@ def deadline_message(
             lines.append(f"Captain: {captain['web_name']}.")
     if suggestion:
         lines.append(f"Model's pick: {suggestion[0]} ({suggestion[1]:.1f} xP).")
+    if transfer_idea:
+        lines.append(transfer_idea)
     lines.insert(0, "Last chance for transfers and your captain." if last_call else "Time to plan your transfers.")
     return {"title": title, "body": " ".join(lines), "url": "/me", "tag": f"deadline-gw{gameweek_id}"}
 
@@ -125,6 +128,18 @@ def price_message(changes: list[tuple[dict, int, int]]) -> dict:
         "url": "/me",
         "tag": "prices",
     }
+
+
+def transfer_idea(plan_row: dict) -> str:
+    """One line from a saved transfer plan: the first week's moves, or roll."""
+    gain = float(plan_row["expected_points"]) - float(plan_row["baseline_points"])
+    weeks = (plan_row.get("plan") or {}).get("weeks") or []
+    moves = weeks[0].get("transfers", []) if weeks else []
+    if not moves or gain < 1:
+        return "Plan: roll your transfer."
+    text = ", ".join(f"{m['out']['name']} → {m['in']['name']}" for m in moves)
+    hits = weeks[0].get("hits") or 0
+    return f"Plan: {text}" + (f" (−{4 * hits})" if hits else "") + f", +{gain:.1f} xP."
 
 
 def first_name(full: str) -> str:
@@ -456,6 +471,18 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
                 newest[row["player_id"]] = row
         xp = {pid: float(r["expected_points"]) for pid, r in newest.items()}
 
+    # Each user's transfer plan for this deadline (table exists from migration 0003).
+    ideas: dict[str, str] = {}
+    if next_gw:
+        try:
+            for row in db.select(
+                "transfer_plans", "user_id,from_gameweek,plan,expected_points,baseline_points",
+                {"user_id": _in(users), "from_gameweek": f"eq.{next_gw['id']}"},
+            ):
+                ideas[row["user_id"]] = transfer_idea(row)
+        except SupabaseError:
+            pass
+
     def suggestion_for(user: str) -> tuple[str, float] | None:
         options = [(p["web_name"], xp[p["id"]]) for p in squads.get(user, []) if p.get("starting") and p["id"] in xp]
         return max(options, key=lambda o: o[1]) if options else None
@@ -469,7 +496,9 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
             key = f"{kind}:gw{next_gw['id']}"
             for user in users:
                 if wants(user, kind) and (user, key) not in sent:
-                    payload = deadline_message(next_gw["id"], seconds, kind == "deadline_1h", squads.get(user), suggestion_for(user))
+                    payload = deadline_message(
+                        next_gw["id"], seconds, kind == "deadline_1h", squads.get(user), suggestion_for(user), ideas.get(user)
+                    )
                     outbox.send(user, kind, [key], payload, ttl=int(seconds), urgency="high" if kind == "deadline_1h" else "normal")
 
     # 2. Team news and price changes for squad players

@@ -1,5 +1,5 @@
-# Pulls the latest FPL data into Supabase every 3 hours, then refreshes the
-# model's expected points for the next five gameweeks.
+# Pulls the latest FPL data into Supabase every 3 hours, refreshes the model's
+# expected points for the next five gameweeks, then re-plans every user's transfers.
 #
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions):
 #   SUPABASE_URL         e.g. https://abcd1234.supabase.co
@@ -55,3 +55,6 @@ jobs:
 
       - name: Predict expected points (next 5 gameweeks)
         run: uv run --no-dev python -m raptor.model.predict
+
+      - name: Plan transfers for every user (next 4 gameweeks)
+        run: uv run --no-dev python -m raptor.optimizer.run

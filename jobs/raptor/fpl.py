@@ -118,6 +118,14 @@ class FplClient:
         """A squad for one gameweek. None if FPL has nothing for it (404)."""
         return self.get(f"entry/{team_id}/event/{gameweek_id}/picks/")
 
+    def entry_history(self, team_id: int) -> dict | None:
+        """A manager's gameweek-by-gameweek record this season, plus chips played."""
+        return self.get(f"entry/{team_id}/history/")
+
+    def entry_transfers(self, team_id: int) -> list[dict]:
+        """Every transfer a manager has made this season, with prices paid."""
+        return self.get(f"entry/{team_id}/transfers/") or []
+
     def live(self, gameweek_id: int) -> dict | None:
         """Every player's points and minutes in one gameweek (updates during matches)."""
         return self.get(f"event/{gameweek_id}/live/")

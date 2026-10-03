@@ -2,13 +2,13 @@
 
 A free, installable web app for Fantasy Premier League: deadline countdowns, alerts about your players, transfer ideas, and a mini-league page built for banter with friends.
 
-Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, push notifications on an installable app, a mini-league page, and an expected-points model. Next up: a transfer optimizer built on the model.
+Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, push notifications on an installable app, a mini-league page, an expected-points model, and a transfer planner built on it.
 
 ## What's in here
 
 ```
 FPL-Raptor/
-├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /league, /notifications
+├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /planner, /league, /notifications
 ├── components/              Countdown, squad list, site header, install help
 ├── public/                  sw.js (shows notifications) and app icons
 ├── lib/                     Supabase clients, FPL helpers, squad and league logic (+ Vitest tests)
@@ -16,6 +16,7 @@ FPL-Raptor/
 ├── jobs/                    Python: the scheduled FPL -> Supabase fetch
 │   ├── raptor/              fpl.py (API + parsing), db.py, changes.py, run.py (fetch), alerts.py (push)
 │   ├── raptor/model/        expected-points model: history.py, features.py, train.py, predict.py
+│   ├── raptor/optimizer/    transfer planner: solve.py (the integer program), inputs.py, run.py
 │   ├── model/               the trained model (xpts.joblib), its metadata, and REPORT.md
 │   └── tests/               pytest, using small made-up FPL responses
 ├── supabase/migrations/     SQL that creates every table and its access rules
@@ -29,7 +30,7 @@ Everything runs on free tiers: Vercel (web app), Supabase (database and sign-in)
 ### 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com) (sign in with GitHub, pick a US East region).
-2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql`.
+2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql` and `20261003000002_transfer_plans.sql`.
 3. From **Project Settings → API Keys** (or the **Connect** button), note three values:
    - the project URL, like `https://abcd1234.supabase.co`
    - the **publishable key** (`sb_publishable_...`): for the web app; safe to expose
@@ -68,10 +69,10 @@ To make a new pair: `npx web-push generate-vapid-keys`. Put the private key in b
 
 1. Open the site and tap **My gameweek**, then **Create an account** with an email and password.
 2. Paste your FPL team ID (the number after `/entry/` on your Points page) or the whole Points link.
-3. My gameweek shows your deadline countdown, flagged players with FPL's injury news, last gameweek's points, bank and team value, and your squad with each player's next fixture and its difficulty.
-
-4. **League** shows each followed mini-league you're in: the table with movement, your closest rival (what they start that you don't, and their captain), the week's awards, everyone's captains, and who owns whom (the template, your differentials, and threats you don't own).
-5. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
+3. My gameweek shows your deadline countdown, flagged players with FPL's injury news, the model's captain pick and a transfer suggestion, last gameweek's points, bank and team value, and your squad with each player's next fixture, its difficulty and expected points.
+4. **Planner** shows the full transfer plan for the next four gameweeks: what to sell and buy each week, whether a hit is worth it, the captain, XI and bench.
+5. **League** shows each followed mini-league you're in: the table with movement, your closest rival (what they start that you don't, and their captain), the week's awards, everyone's captains, and who owns whom (the template, your differentials, and threats you don't own).
+6. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
 
 A new user's team is picked up by the next scheduled fetch. Until then, My gameweek loads their squad straight from FPL.
 
@@ -79,7 +80,7 @@ A new user's team is picked up by the next scheduled fetch. Until then, My gamew
 
 | Alert | When |
 | --- | --- |
-| Deadline reminder | Under 24 hours to the deadline, and again under 75 minutes. Lists flagged players in your team and your captain |
+| Deadline reminder | Under 24 hours to the deadline, and again under 75 minutes. Lists flagged players in your team, your captain, the model's pick and the planner's transfer |
 | Team news | A player in your squad gets flagged, their chance of playing or news changes, or they're available again |
 | Price change | A player in your squad rises or falls in price |
 | League captains | Within 48 hours of a deadline, once most of your league's squads are in: everyone's captain picks, yours, and your rival's |
@@ -135,6 +136,31 @@ they were measured, and the limits.
 
   Commit the updated `jobs/model/` files; the next fetch uses them.
 
+## The transfer planner
+
+After the predictions, `raptor.optimizer.run` plans transfers for every signed-up manager over
+the next four gameweeks. It's an integer program (PuLP with the free CBC solver) that chooses,
+for each week, the squad, the starting XI, the captain and the transfers, to maximise expected
+points under FPL's rules:
+
+- 2 GK, 5 DEF, 5 MID, 3 FWD; at most 3 per club; a valid formation (1 GK, 3+ DEF, 2+ MID, 1+ FWD)
+- the bank can't go negative, and players are sold at FPL's selling price (you keep half of any
+  rise since you bought them, rounded down)
+- free transfers roll over, up to 5; every extra transfer costs 4 points, so a hit is only taken
+  when the extra expected points beat it
+
+Later weeks count a little less (×0.85 a week) because predictions get less reliable, and the
+bench counts for a tenth of its expected points as cover. Free transfers, bank and purchase prices
+come from your public FPL history and transfers. The same model with transfers switched off gives
+the "keeping your team" baseline; a plan is only suggested when it beats that by at least a point.
+
+It considers your squad plus the best-predicted players in each position (about 50), which solves
+in a second or two per manager. My gameweek shows the first week's move, **Planner** shows every
+week, and deadline reminders include it.
+
+Limits: it plans from your squad at the last deadline (FPL doesn't share transfers until the next
+deadline passes), it doesn't plan chips, and it is only as good as the model's predictions.
+
 ## How the data works
 
 | Table | What's in it | Written |
@@ -145,10 +171,11 @@ they were measured, and the limits.
 | `entry_gameweeks`, `picks` | Each tracked manager's squad, captain, chip, points, bank | Current and previous gameweek, until FPL confirms final points |
 | `player_gameweeks` | Each player's points, minutes and bonus per gameweek | Current and previous gameweek, until FPL confirms final points |
 | `predictions` | Expected points per player for each of the next five gameweeks | After every fetch, by the model |
+| `transfer_plans` | Each user's four-week transfer plan and the no-transfer baseline (only they can read it) | After every fetch, by the planner |
 | `profiles` | Each user's FPL team id and name | By the app, at onboarding |
 | `notification_prefs`, `push_subscriptions` | Which alerts each user wants; their devices | By the app, on the Notifications page |
 | `notifications_sent` | Every alert sent, so none goes out twice | By the alerts job |
-| `job_runs` | One row per fetch, prediction or alerts run, with status and a summary | Every run |
+| `job_runs` | One row per fetch, prediction, plan or alerts run, with status and a summary | Every run |
 
 Things worth knowing about FPL's data:
 
@@ -164,6 +191,8 @@ Things worth knowing about FPL's data:
 - **Fetch fails with `401 Invalid API key`:** check the `SUPABASE_SECRET_KEY` secret is the secret key, not the publishable one.
 - **Fetch fails with `relation ... does not exist`:** the SQL in `supabase/migrations` hasn't been run yet.
 - **Fetch summary says "player points skipped":** run `supabase/migrations/20261003000001_player_gameweeks.sql` in the SQL Editor. Captain awards appear after the next fetch.
+- **Fetch summary says "plans skipped":** run `supabase/migrations/20261003000002_transfer_plans.sql` in the SQL Editor. Plans appear after the next fetch.
+- **Planner says your first plan appears after the next update:** the plan is made by the scheduled fetch (every 3 hours). Run **Fetch FPL data** by hand to get one now.
 - **League page says none of your leagues are followed:** add the league's id to `FPL_LEAGUE_IDS` in `.github/workflows/fetch.yml`.
 - **Fetch shows `skipped`:** FPL was down or mid-update (common around deadlines). The next run picks it up.
 - **FPL returns 403 to GitHub Actions:** FPL occasionally blocks cloud servers. Run the job from your laptop to confirm the code works; if the block persists, the fetch can move to another scheduler.
@@ -175,4 +204,4 @@ Things worth knowing about FPL's data:
 
 ## What's next
 
-Phase 6 of the plan: a transfer optimizer (integer programming) that uses the model's predictions to suggest transfers over the next few gameweeks, including whether a −4 hit is worth it.
+Phase 7 of the plan, the stretch goals: chip planning (when to Wildcard, Bench Boost or Free Hit), a "what if" mode on the Planner to test your own transfers, model refinements, and anything the league asks for.

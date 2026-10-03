@@ -20,3 +20,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Push: `public/sw.js` shows notifications; `jobs/raptor/alerts.py` decides and sends them (every 15 min); the public VAPID key is in `lib/pushConfig.ts`, the private key only in secrets.
 - League maths (awards, captains, ownership, rival) lives in `lib/league.ts`; the alerts job has a small Python twin for league pushes.
 - Model: features in `jobs/raptor/model/features.py` are shared by training and live prediction; change them in one place and retrain (`uv run python -m raptor.model.train`) so `jobs/model/` matches.
+- Optimizer: `jobs/raptor/optimizer/solve.py` is the integer program (PuLP 2.x with bundled CBC; pulp 3+/4 changed the API, so it's pinned `<3`). `inputs.py` derives free transfers, bank and selling prices from public FPL history. The web app reads the saved plan via `lib/plan.ts`.

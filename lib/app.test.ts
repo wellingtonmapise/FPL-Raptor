@@ -189,3 +189,27 @@ describe("predictions", () => {
     expect(expectedXI(squad.starters, new Map())).toBeNull();
   });
 });
+
+describe("transfer plan headline", () => {
+  const player = (id: number, name: string) => ({ id, name, position: 3, team: 1, price: 70 });
+  const week = (transfers: { out: ReturnType<typeof player>; in: ReturnType<typeof player> }[], hits = 0) => ({
+    gameweek: 6, free_transfers: 1, hits, transfers, captain: player(9, "Haaland"), lineup: [], bench: [], expected_points: 50, bank_after: 3,
+  });
+  const row = (weeks: ReturnType<typeof week>[], expected: number, baseline: number) => ({
+    from_gameweek: 6, horizon: 4, free_transfers: 1, bank: 3, plan: { weeks }, expected_points: expected, baseline_points: baseline,
+    model_version: "gbm", created_at: "2026-10-05T12:00:00Z",
+  });
+
+  it("suggests the first week's moves when they're worth it", async () => {
+    const { headline, gameweekRange } = await import("@/lib/plan");
+    const r = row([week([{ out: player(5, "Palmer"), in: player(6, "Saka") }])], 210.4, 201.2);
+    expect(headline(r)).toEqual({ kind: "move", gain: expect.closeTo(9.2, 5), moves: "Palmer → Saka", hits: 0 });
+    expect(gameweekRange(r)).toBe("GW6-9");
+  });
+
+  it("says roll when the plan barely beats keeping the team", async () => {
+    const { headline } = await import("@/lib/plan");
+    expect(headline(row([week([{ out: player(5, "Palmer"), in: player(6, "Saka") }])], 201.6, 201.2)).kind).toBe("roll");
+    expect(headline(row([week([])], 201.2, 201.2)).kind).toBe("roll");
+  });
+});
