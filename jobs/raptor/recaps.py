@@ -56,8 +56,14 @@ Rules:
 - Roast FPL decisions only. Nothing about anyone's looks, job, personal life, nationality, race, \
 religion, gender or sexuality. No slurs and no swearing.
 - Call managers by the first name given.
-- 150 to 220 words in 3 or 4 short paragraphs. No headings, lists, hashtags or emojis.
-- The first line is a punchy headline of at most 8 words, then a blank line, then the recap."""
+- No headings, lists, hashtags or emojis.
+
+Reply with JSON only (no code fences), shaped like:
+{"headline": "...", "captions": {"<card id>": "...", ...}, "recap": "..."}
+- headline: a punchy headline of at most 8 words.
+- captions: for every award card listed, one savage line of at most 20 words about that card's \
+manager and stat, like a meme caption.
+- recap: 150 to 220 words in 3 or 4 short paragraphs separated by blank lines."""
 
 
 class RecapUnavailable(Exception):
@@ -102,6 +108,7 @@ def league_facts(
         best = max(starters, key=lambda p: points.get(p["player_id"], 0), default=None)
         managers.append(
             {
+                "team_id": m["team_id"],  # for avatars; not sent to the model
                 "name": first_name(m["manager_name"]),
                 "team": m["team_name"],
                 "points": (e.get("points") or 0) - (e.get("event_transfers_cost") or 0),
@@ -141,6 +148,111 @@ def league_facts(
         "players_only_one_manager_had_who_scored_10_plus": lone_heroes,
         "managers": managers,
     }
+
+
+CARD_TITLES = {
+    "top": "Top Dog",
+    "rocket": "Rocket",
+    "captain_hero": "Armband Hero",
+    "lone": "Lone Wolf",
+    "chip": "Chip Watch",
+    "bench": "Bench Warmer",
+    "captain_fail": "Armband Disaster",
+    "hit": "Hit and Miss",
+    "freefall": "Freefall",
+    "spoon": "Wooden Spoon",
+}
+
+
+def ordinal(n: int) -> str:
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def recap_cards(facts: dict) -> list[dict]:
+    """The week's awards, worked out from the facts (the model only writes the jokes).
+
+    Good news first, roasts after, the wooden spoon last. Ties go to whoever is
+    higher in the table.
+    """
+    managers = facts["managers"]
+    if not managers:
+        return []
+    cards: dict[str, dict] = {}
+
+    def card(kind: str, m: dict, stat: str) -> None:
+        cards[kind] = {"id": kind, "kind": kind, "title": CARD_TITLES[kind], "manager": m["name"], "team_id": m.get("team_id"), "stat": stat}
+
+    pick = lambda key, best: (max if best else min)(managers, key=key)  # noqa: E731 (first on ties: managers are in table order)
+    top = pick(lambda m: m["points"], True)
+    card("top", top, f"{top['points']} points")
+    climbs = [m for m in managers if m["rank_before"] and m["rank_now"]]
+    if climbs:
+        up = max(climbs, key=lambda m: m["rank_before"] - m["rank_now"])
+        if up["rank_before"] > up["rank_now"]:
+            card("rocket", up, f"{ordinal(up['rank_before'])} to {ordinal(up['rank_now'])}")
+    captained = [m for m in managers if m["captain"] and m["captain_points"] is not None]
+    if len(captained) > 1:
+        hero = max(captained, key=lambda m: m["captain_points"])
+        flop = min(captained, key=lambda m: m["captain_points"])
+        if hero["captain_points"] > flop["captain_points"]:
+            card("captain_hero", hero, f"{hero['captain']}: {hero['captain_points']} points")
+    lone = facts.get("players_only_one_manager_had_who_scored_10_plus") or []
+    if lone:
+        owner = next((m for m in managers if m["name"] == lone[0]["owner"]), None)
+        if owner:
+            card("lone", owner, f"{lone[0]['player']}: {lone[0]['points']} points, nobody else had him")
+    chips = [m for m in managers if m["chip"]]
+    if chips:
+        c = chips[0]
+        card("chip", c, f"{c['chip']}: {c['points']} points" + (f" (+{len(chips) - 1} more played chips)" if len(chips) > 1 else ""))
+    bench = pick(lambda m: m["bench_points"], True)
+    if bench["bench_points"] > 0:
+        card("bench", bench, f"{bench['bench_points']} points on the bench")
+    if len(captained) > 1 and "captain_hero" in cards:
+        flop = min(captained, key=lambda m: m["captain_points"])
+        card("captain_fail", flop, f"{flop['captain']}: {flop['captain_points']} points")
+    average = facts.get("average") or 0
+    hitters = [m for m in managers if m["hit_cost"] and m["points"] < average]
+    if hitters:
+        h = min(hitters, key=lambda m: m["points"])
+        card("hit", h, f"−{h['hit_cost']} hit, {h['points']} points")
+    if climbs:
+        down = min(climbs, key=lambda m: m["rank_before"] - m["rank_now"])
+        if down["rank_before"] < down["rank_now"]:
+            card("freefall", down, f"{ordinal(down['rank_before'])} to {ordinal(down['rank_now'])}")
+    spoon = pick(lambda m: m["points"], False)
+    if spoon is not top:
+        card("spoon", spoon, f"{spoon['points']} points")
+    return [cards[k] for k in CARD_TITLES if k in cards]
+
+
+def model_facts(facts: dict, cards: list[dict]) -> dict:
+    """What the model sees: the facts without internal ids, plus the cards to caption."""
+    managers = [{k: v for k, v in m.items() if k != "team_id"} for m in facts.get("managers", [])]
+    return {
+        **facts,
+        "managers": managers,
+        "award_cards": [{"id": c["id"], "award": c["title"], "manager": c["manager"], "stat": c["stat"]} for c in cards],
+    }
+
+
+def parse_reply(content: str, card_ids: list[str]) -> tuple[str, str, dict[str, str]]:
+    """The model's JSON -> (headline, recap, captions). Falls back to plain text."""
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.strip("`").removeprefix("json").strip()
+    start, end = text.find("{"), text.rfind("}")
+    try:
+        data = json.loads(text[start : end + 1]) if start >= 0 and end > start else None
+    except ValueError:
+        data = None
+    if isinstance(data, dict) and isinstance(data.get("recap"), str) and data["recap"].strip():
+        title = str(data.get("headline") or "").strip().strip('"“”*') or data["recap"].split(". ")[0][:80]
+        raw = data.get("captions") if isinstance(data.get("captions"), dict) else {}
+        captions = {k: " ".join(str(raw[k]).split())[:200] for k in card_ids if k in raw and str(raw[k]).strip()}
+        return title[:120], data["recap"].strip()[:3000], captions
+    title, body = split_recap(content)
+    return title, body, {}
 
 
 def split_recap(text: str) -> tuple[str, str]:
@@ -196,8 +308,11 @@ def candidate_models(token: str, session: requests.Session) -> list[str]:
     return (rank_models(ids) or list(MODELS))[:MAX_MODELS]
 
 
-def write_recap(facts: dict, token: str, session: requests.Session | None = None, sleep=time.sleep) -> tuple[str, str, str]:
-    """-> (model, headline, body). Tries each Flash model in turn, retrying busy ones."""
+def write_recap(
+    facts: dict, token: str, session: requests.Session | None = None, sleep=time.sleep, cards: list[dict] | None = None
+) -> tuple[str, str, str, dict[str, str]]:
+    """-> (model, headline, body, captions by card id). Tries each Flash model in turn, retrying busy ones."""
+    cards = cards or []
     session = session or requests.Session()
     problems = []
     for model in candidate_models(token, session):
@@ -210,7 +325,7 @@ def write_recap(facts: dict, token: str, session: requests.Session | None = None
                         "model": model,
                         "messages": [
                             {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": "This week's facts:\n" + json.dumps(facts, ensure_ascii=False, indent=1)},
+                            {"role": "user", "content": "This week's facts:\n" + json.dumps(model_facts(facts, cards), ensure_ascii=False, indent=1)},
                         ],
                         "temperature": 0.9,
                         "max_tokens": 4000,  # room for the model's thinking as well as the recap
@@ -224,11 +339,11 @@ def write_recap(facts: dict, token: str, session: requests.Session | None = None
                 if resp.ok:
                     try:
                         content = resp.json()["choices"][0]["message"]["content"] or ""
-                        title, body = split_recap(content)
+                        title, body, captions = parse_reply(content, [c["id"] for c in cards])
                     except (KeyError, IndexError, ValueError, RecapUnavailable) as exc:
                         problems.append(f"{model}: unusable reply ({type(exc).__name__}: {str(exc)[:60]}; {resp.text[:60]!r})")
                         break
-                    return model, title, body
+                    return model, title, body, captions
                 problem = f"{model}: HTTP {resp.status_code} {_error_text(resp)}"
                 busy = resp.status_code in BUSY
             if not busy or attempt == len(RETRY_WAITS):
@@ -247,12 +362,17 @@ def run_recaps(db: Database, now: datetime, token: str | None, session: requests
     gw = latest_final_gameweek(db)
     if gw is None:
         return "no finished gameweek yet"
+    with_cards = True
     try:
-        done = {r["league_id"] for r in db.select("recaps", "league_id", {"gameweek_id": f"eq.{gw}"})}
+        done = {r["league_id"] for r in db.select("recaps", "league_id,cards", {"gameweek_id": f"eq.{gw}"}) if r.get("cards")}
     except SupabaseError as exc:
-        if "PGRST205" in str(exc) or "does not exist" in str(exc):
+        missing_table = "PGRST205" in str(exc) or ("does not exist" in str(exc) and "cards" not in str(exc))
+        if missing_table:
             return f"recaps skipped (run {MIGRATION})"
-        raise
+        if "cards" not in str(exc):
+            raise
+        with_cards = False  # migration 0006 not run yet: plain recaps, once
+        done = {r["league_id"] for r in db.select("recaps", "league_id", {"gameweek_id": f"eq.{gw}"})}
     leagues = [l for l in db.select("leagues", "id,name") if l["id"] not in done]
     if not leagues:
         return f"GW{gw} recaps already written"
@@ -284,19 +404,20 @@ def run_recaps(db: Database, now: datetime, token: str | None, session: requests
         except SupabaseError:
             points = {}
         facts = league_facts(league, gw, members, entries, picks, names, points)
+        cards = recap_cards(facts) if with_cards else []
         try:
-            model, title, body = write_recap(facts, token, session)
+            model, title, body, captions = write_recap(facts, token, session, cards=cards)
         except RecapUnavailable as exc:
             log.warning("Recap for %s failed: %s", league["name"], exc)
             failed.append(f"{league['name']}: {exc}")
             continue
-        db.upsert(
-            "recaps",
-            [{"league_id": league["id"], "gameweek_id": gw, "title": title, "body": body, "model": model, "created_at": now.isoformat(timespec="seconds")}],
-            on_conflict="league_id,gameweek_id",
-        )
+        row = {"league_id": league["id"], "gameweek_id": gw, "title": title, "body": body, "model": model, "created_at": now.isoformat(timespec="seconds")}
+        if with_cards:
+            row["cards"] = [{**c, "caption": captions.get(c["id"], "")} for c in cards]
+        db.upsert("recaps", [row], on_conflict="league_id,gameweek_id")
         written.append(f"{league['name']} ({model}): {title}")
-        announce("notice", f"Recap: {league['name']} GW{gw}", f"{title}\n\n{body}")
+        lines = "\n".join(f"{c['title']}: {c['manager']} ({c['stat']}) {captions.get(c['id'], '')}" for c in cards)
+        announce("notice", f"Recap: {league['name']} GW{gw}", f"{title}\n\n{lines}\n\n{body}")
 
     parts = []
     if written:

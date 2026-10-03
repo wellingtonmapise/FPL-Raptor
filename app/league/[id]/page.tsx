@@ -17,9 +17,33 @@ import {
   type Member,
   type PlayerName,
 } from "@/lib/league";
+import RecapStory from "@/components/recap/RecapStory";
+import { tallyReactions, type ReactionRow, type Recap, type Tally } from "@/lib/recap";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "League · FPL Raptor" };
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** The league's newest recap, with its cards once migration 0006 has run (and none before 0004). */
+async function latestRecap(supabase: Supabase, leagueId: number): Promise<Recap | null> {
+  const query = (columns: string) =>
+    supabase.from("recaps").select(columns).eq("league_id", leagueId).order("gameweek_id", { ascending: false }).limit(1).maybeSingle();
+  const withCards = await query("gameweek_id,title,body,model,cards");
+  if (!withCards.error) return (withCards.data as unknown as Recap | null) ?? null;
+  const plain = await query("gameweek_id,title,body,model");
+  return plain.error || !plain.data ? null : { ...(plain.data as unknown as Omit<Recap, "cards">), cards: null };
+}
+
+/** Everyone's reactions to a recap's cards; null if they can't be loaded (or you're not in the league). */
+async function recapReactions(supabase: Supabase, leagueId: number, gameweekId: number, userId: string): Promise<Tally | null> {
+  const { data, error } = await supabase
+    .from("recap_reactions")
+    .select("card_id,emoji,user_id")
+    .eq("league_id", leagueId)
+    .eq("gameweek_id", gameweekId);
+  return error ? null : tallyReactions((data ?? []) as ReactionRow[], userId);
+}
 
 function Card({
   title,
@@ -89,20 +113,14 @@ export default async function LeaguePage({
         )
         .eq("league_id", leagueId)
         .order("rank"),
-      // Missing until migration 0004 has run: the card just stays hidden.
-      supabase
-        .from("recaps")
-        .select("gameweek_id,title,body,model")
-        .eq("league_id", leagueId)
-        .order("gameweek_id", { ascending: false })
-        .limit(1)
-        .maybeSingle<{ gameweek_id: number; title: string; body: string; model: string }>(),
+      latestRecap(supabase, leagueId),
     ]);
-  const recap = recapRes.error ? null : recapRes.data;
+  const recap = recapRes;
   if (!league) notFound();
   const members = (memberRows ?? []) as Member[];
   const myTeamId = profile?.fpl_team_id ?? null;
   const me = members.find((m) => m.team_id === myTeamId) ?? null;
+  const reactions = recap?.cards?.length && me ? await recapReactions(supabase, leagueId, recap.gameweek_id, userId) : null;
   const teamIds = members.map((m) => m.team_id);
 
   // The latest gameweek the fetch job has squads for.
@@ -189,7 +207,9 @@ export default async function LeaguePage({
         </p>
       </header>
 
-      {recap && (
+      {recap?.cards?.length ? (
+        <RecapStory recap={recap} leagueId={leagueId} leagueName={league.name} reactions={reactions} />
+      ) : recap ? (
         <section
           id="recap"
           className="scroll-mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/60"
@@ -211,7 +231,7 @@ export default async function LeaguePage({
             the stats, so don&apos;t take it personally.
           </p>
         </section>
-      )}
+      ) : null}
 
       {rival && (
         <Card
