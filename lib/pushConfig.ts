@@ -18,6 +18,7 @@ export const ALERT_TYPES = [
   { id: "deadline_1h", label: "Deadline reminder, 1 hour before" },
   { id: "player_flag", label: "Injury and availability news for your players" },
   { id: "price_change", label: "Price changes for your players" },
+  { id: "league", label: "Mini-league captains after each deadline, and weekly awards" },
 ] as const;
 
 export type AlertType = (typeof ALERT_TYPES)[number]["id"];

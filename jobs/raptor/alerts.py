@@ -8,6 +8,8 @@ Each run:
     another when it's under 75 minutes away (the window absorbs late runs)
   * team news: injury/availability changes for players in your squad
   * price changes for players in your squad
+  * mini-league: a captain round-up after each deadline, and the weekly
+    awards once FPL confirms the gameweek's points
 
 notifications_sent records every alert key, so nothing goes out twice, and
 notification_prefs lets each user switch types off (everything is on unless
@@ -27,7 +29,7 @@ from typing import Callable
 import requests
 
 from raptor.config import load_settings
-from raptor.db import Database
+from raptor.db import Database, SupabaseError
 from raptor.fpl import format_price
 from raptor.run import announce, utc_now
 
@@ -116,6 +118,92 @@ def price_message(changes: list[tuple[dict, int, int]]) -> dict:
     }
 
 
+def first_name(full: str) -> str:
+    return full.split()[0] if full.split() else full
+
+
+def rival_of(members: list[dict], my_team: int) -> dict | None:
+    """The manager directly above you, or directly below if you're top."""
+    ranked = sorted((m for m in members if m.get("rank")), key=lambda m: m["rank"])
+    index = next((i for i, m in enumerate(ranked) if m["team_id"] == my_team), None)
+    if index is None or len(ranked) < 2:
+        return None
+    return ranked[index - 1] if index > 0 else ranked[1]
+
+
+def captain_roundup_message(league: dict, gameweek_id: int, members: list[dict], captains: dict[int, str], my_team: int) -> dict:
+    """captains: team_id -> captain's name."""
+    counts: dict[str, int] = {}
+    for name in captains.values():
+        counts[name] = counts.get(name, 0) + 1
+    popular = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    shown = ", ".join(f"{name} ×{n}" for name, n in popular[:3])
+    if len(popular) > 3:
+        shown += f", {len(popular) - 3} others"
+    lines = [shown + "."]
+    if my_team in captains:
+        mine = captains[my_team]
+        same = counts[mine] - 1
+        lines.append(f"You went {mine}" + (f", with {same} others." if same else ", on your own."))
+    rival = rival_of(members, my_team)
+    me = next((m for m in members if m["team_id"] == my_team), None)
+    if rival and me and rival["team_id"] in captains:
+        gap = abs((rival.get("total") or 0) - (me.get("total") or 0))
+        where = "ahead" if (rival.get("rank") or 0) < (me.get("rank") or 0) else "behind"
+        lines.append(f"{first_name(rival['manager_name'])} ({gap} {where}) went {captains[rival['team_id']]}.")
+    return {
+        "title": f"GW{gameweek_id} captains in {league['name']}",
+        "body": " ".join(lines),
+        "url": f"/league/{league['id']}",
+        "tag": f"league-captains-{league['id']}-gw{gameweek_id}",
+    }
+
+
+def awards_message(
+    league: dict,
+    gameweek_id: int,
+    members: list[dict],
+    entries: dict[int, dict],
+    captains: dict[int, tuple[str, int]],
+    my_team: int,
+) -> dict:
+    """entries: team_id -> entry row. captains: team_id -> (captain name, points as captain)."""
+    names = {m["team_id"]: first_name(m["manager_name"]) for m in members}
+    net = {t: (e.get("points") or 0) - (e.get("event_transfers_cost") or 0) for t, e in entries.items() if t in names}
+    parts = []
+    if net:
+        top = max(net, key=lambda t: net[t])
+        low = min(net, key=lambda t: net[t])
+        parts.append(f"Top: {names[top]} {net[top]}.")
+        if low != top:
+            parts.append(f"Wooden spoon: {names[low]} {net[low]}.")
+    caps = {t: c for t, c in captains.items() if t in names}
+    if len(caps) > 1:
+        hero = max(caps, key=lambda t: caps[t][1])
+        fail = min(caps, key=lambda t: caps[t][1])
+        parts.append(f"Captain hero: {names[hero]} ({caps[hero][0]}, {caps[hero][1]}).")
+        if caps[fail][1] != caps[hero][1]:
+            parts.append(f"Captain fail: {names[fail]} ({caps[fail][0]}, {caps[fail][1]}).")
+    bench = {t: e.get("points_on_bench") or 0 for t, e in entries.items() if t in names}
+    if bench and max(bench.values()) > 0:
+        worst = max(bench, key=lambda t: bench[t])
+        parts.append(f"Bench of shame: {names[worst]} {bench[worst]}.")
+    if my_team in net:
+        place = 1 + sum(1 for v in net.values() if v > net[my_team])
+        parts.append(f"You: {net[my_team]} ({ordinal(place)} of {len(net)}).")
+    return {
+        "title": f"GW{gameweek_id} awards · {league['name']}",
+        "body": " ".join(parts),
+        "url": f"/league/{league['id']}",
+        "tag": f"league-awards-{league['id']}-gw{gameweek_id}",
+    }
+
+
+def ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 # ---------------------------------------------------------------------------
 # Sending
 # ---------------------------------------------------------------------------
@@ -199,6 +287,95 @@ def _in(values) -> str:
     return "in.(" + ",".join(str(v) for v in values) + ")"
 
 
+ROUNDUP_WINDOW = timedelta(hours=48)  # captain round-ups only for a fresh deadline
+COVERAGE = 0.75  # share of the league's squads needed before sending
+
+
+def league_alerts(
+    db: Database,
+    outbox: Outbox,
+    now: datetime,
+    current: dict,
+    profiles: dict[str, int | None],
+    wants: Callable[[str, str], bool],
+    sent: set[tuple[str, str]],
+) -> None:
+    """Captain round-up after a deadline, weekly awards once points are final."""
+    team_to_users: dict[int, list[str]] = {}
+    for user, team in profiles.items():
+        if team and wants(user, "league"):
+            team_to_users.setdefault(team, []).append(user)
+    if not team_to_users:
+        return
+    memberships = db.select("league_members", "league_id,team_id", {"team_id": _in(sorted(team_to_users))})
+    league_ids = sorted({m["league_id"] for m in memberships})
+    if not league_ids:
+        return
+    leagues = {l["id"]: l for l in db.select("leagues", "id,name", {"id": _in(league_ids)})}
+    all_members = db.select("league_members", "league_id,team_id,manager_name,rank,total", {"league_id": _in(league_ids)})
+    teams = sorted({m["team_id"] for m in all_members})
+    gw = current["id"]
+
+    deadline = datetime.fromisoformat(current["deadline_time"].replace("Z", "+00:00"))
+    fresh = timedelta(0) <= now - deadline <= ROUNDUP_WINDOW
+    final = bool(current.get("finished") and current.get("data_checked"))
+    if not (fresh or final):
+        return
+
+    captain_picks = db.select(
+        "picks", "team_id,player_id,multiplier", {"gameweek_id": f"eq.{gw}", "is_captain": "is.true", "team_id": _in(teams)}
+    )
+    captain_ids = sorted({p["player_id"] for p in captain_picks})
+    names = {p["id"]: p["web_name"] for p in db.select("players", "id,web_name", {"id": _in(captain_ids)})} if captain_ids else {}
+    entries = (
+        {e["team_id"]: e for e in db.select(
+            "entry_gameweeks",
+            "team_id,points,event_transfers_cost,points_on_bench,final",
+            {"gameweek_id": f"eq.{gw}", "team_id": _in(teams), "final": "is.true"},
+        )}
+        if final
+        else {}
+    )
+    points: dict[int, int] = {}
+    if final and captain_ids:
+        try:
+            points = {
+                r["player_id"]: r["points"]
+                for r in db.select("player_gameweeks", "player_id,points", {"gameweek_id": f"eq.{gw}", "player_id": _in(captain_ids)})
+            }
+        except SupabaseError:  # table missing until migration 0002 runs
+            points = {}
+
+    for league_id in league_ids:
+        league = leagues.get(league_id)
+        members = [m for m in all_members if m["league_id"] == league_id]
+        if not league or not members:
+            continue
+        member_teams = {m["team_id"] for m in members}
+        captains = {p["team_id"]: names.get(p["player_id"], "?") for p in captain_picks if p["team_id"] in member_teams}
+        enough_captains = len(captains) >= COVERAGE * len(members)
+
+        for team in member_teams & set(team_to_users):
+            for user in team_to_users[team]:
+                if fresh and enough_captains:
+                    key = f"league_captains:{league_id}:gw{gw}"
+                    if (user, key) not in sent:
+                        msg = captain_roundup_message(league, gw, members, captains, team)
+                        outbox.send(user, "league", [key], msg, ttl=12 * 3600)
+                league_entries = {t: e for t, e in entries.items() if t in member_teams}
+                # Awards wait for final points and for player points (captain awards).
+                if final and points and len(league_entries) >= COVERAGE * len(members):
+                    key = f"league_awards:{league_id}:gw{gw}"
+                    if (user, key) not in sent:
+                        caps = {
+                            p["team_id"]: (names.get(p["player_id"], "?"), points.get(p["player_id"], 0) * max(p["multiplier"], 1))
+                            for p in captain_picks
+                            if p["team_id"] in member_teams and p["player_id"] in points
+                        }
+                        msg = awards_message(league, gw, members, league_entries, caps, team)
+                        outbox.send(user, "league", [key], msg, ttl=24 * 3600)
+
+
 def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
     now_iso = now.isoformat(timespec="seconds")
     subs = db.select("push_subscriptions", "id,user_id,endpoint,p256dh,auth")
@@ -222,7 +399,7 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
         for row in db.select("notifications_sent", "user_id,alert_key", {"user_id": _in(users), "sent_at": f"gt.{since_sent}"})
     }
 
-    gameweeks = db.select("gameweeks", "id,deadline_time,is_current")
+    gameweeks = db.select("gameweeks", "id,deadline_time,is_current,finished,data_checked")
     current = next((g for g in gameweeks if g["is_current"]), None)
     upcoming = sorted(
         (g for g in gameweeks if datetime.fromisoformat(g["deadline_time"].replace("Z", "+00:00")) > now),
@@ -287,6 +464,10 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
                 moved = [v for v in latest.values() if v[1] != v[2]]
                 if moved:
                     outbox.send(user, "price_change", [f"change:{c['id']}" for c in prices], price_message(moved), ttl=12 * 3600)
+
+    # 3. Mini-league alerts
+    if current:
+        league_alerts(db, outbox, now, current, profiles, wants, sent)
 
     for sub_id in outbox.gone:
         db.delete("push_subscriptions", {"id": f"eq.{sub_id}"})

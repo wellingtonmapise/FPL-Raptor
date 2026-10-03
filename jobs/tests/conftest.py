@@ -45,6 +45,7 @@ class FakeFpl:
         self.fixtures_data = load("fixtures.json")
         self.standings_data = {777: load("standings.json")}
         self.picks_data = load("picks.json")
+        self.live_calls: list[int] = []
         self.picks_calls: list[tuple[int, int]] = []
 
     def bootstrap(self) -> dict:
@@ -60,6 +61,17 @@ class FakeFpl:
     def picks(self, team_id: int, gameweek_id: int):
         self.picks_calls.append((team_id, gameweek_id))
         return copy.deepcopy(self.picks_data)
+
+    def live(self, gameweek_id: int):
+        self.live_calls.append(gameweek_id)
+        return {
+            "elements": [
+                {"id": 101, "stats": {"total_points": 6, "minutes": 90, "bonus": 0}},
+                {"id": 202, "stats": {"total_points": 2, "minutes": 60, "bonus": 0}},
+                {"id": 303, "stats": {"total_points": 13, "minutes": 90, "bonus": 3}},
+                {"id": 404, "stats": {"total_points": 1, "minutes": 0, "bonus": 0}},
+            ]
+        }
 
 
 class FakeDb:
@@ -99,8 +111,8 @@ class FakeDb:
                 raise NotImplementedError(rule)
         return True
 
-    def select(self, table, columns="*", filters=None, page_size=1000):
-        found = [r for r in self.rows(table) if self._matches(r, filters)]
+    def select(self, table, columns="*", filters=None, page_size=1000, limit=None):
+        found = [r for r in self.rows(table) if self._matches(r, filters)][:limit]
         if columns == "*":
             return [dict(r) for r in found]
         wanted = columns.split(",")

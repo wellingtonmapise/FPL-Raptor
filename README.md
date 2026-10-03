@@ -2,16 +2,16 @@
 
 A free, installable web app for Fantasy Premier League: deadline countdowns, alerts about your players, transfer ideas, and a mini-league page built for banter with friends.
 
-Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, and push notifications on an installable app. Later phases (league page, points model, transfer optimizer) build on top of it.
+Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, push notifications on an installable app, and a mini-league page. Later phases (points model, transfer optimizer) build on top of it.
 
 ## What's in here
 
 ```
 FPL-Raptor/
-├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /notifications
+├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /league, /notifications
 ├── components/              Countdown, squad list, site header, install help
 ├── public/                  sw.js (shows notifications) and app icons
-├── lib/                     Supabase clients, FPL helpers, squad logic (+ Vitest tests)
+├── lib/                     Supabase clients, FPL helpers, squad and league logic (+ Vitest tests)
 ├── proxy.ts                 Refreshes the sign-in session on every request
 ├── jobs/                    Python: the scheduled FPL -> Supabase fetch
 │   ├── raptor/              fpl.py (API + parsing), db.py, changes.py, run.py (fetch), alerts.py (push)
@@ -27,7 +27,7 @@ Everything runs on free tiers: Vercel (web app), Supabase (database and sign-in)
 ### 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com) (sign in with GitHub, pick a US East region).
-2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**.
+2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql`.
 3. From **Project Settings → API Keys** (or the **Connect** button), note three values:
    - the project URL, like `https://abcd1234.supabase.co`
    - the **publishable key** (`sb_publishable_...`): for the web app; safe to expose
@@ -68,7 +68,8 @@ To make a new pair: `npx web-push generate-vapid-keys`. Put the private key in b
 2. Paste your FPL team ID (the number after `/entry/` on your Points page) or the whole Points link.
 3. My gameweek shows your deadline countdown, flagged players with FPL's injury news, last gameweek's points, bank and team value, and your squad with each player's next fixture and its difficulty.
 
-4. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
+4. **League** shows each followed mini-league you're in: the table with movement, your closest rival (what they start that you don't, and their captain), the week's awards, everyone's captains, and who owns whom (the template, your differentials, and threats you don't own).
+5. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
 
 A new user's team is picked up by the next scheduled fetch. Until then, My gameweek loads their squad straight from FPL.
 
@@ -79,6 +80,8 @@ A new user's team is picked up by the next scheduled fetch. Until then, My gamew
 | Deadline reminder | Under 24 hours to the deadline, and again under 75 minutes. Lists flagged players in your team and your captain |
 | Team news | A player in your squad gets flagged, their chance of playing or news changes, or they're available again |
 | Price change | A player in your squad rises or falls in price |
+| League captains | Within 48 hours of a deadline, once most of your league's squads are in: everyone's captain picks, yours, and your rival's |
+| League awards | Once FPL confirms the gameweek's points: top score, wooden spoon, captain hero and fail, bench of shame, and where you finished |
 
 Team news and prices come from the fetch, so they arrive within about 3 hours of FPL changing them.
 
@@ -113,6 +116,7 @@ uv run --env-file .env python -m raptor.run
 | `player_changes` | Price, status, news and chance-of-playing changes | Every run, only what changed |
 | `leagues`, `league_members` | Standings of followed leagues | Every run |
 | `entry_gameweeks`, `picks` | Each tracked manager's squad, captain, chip, points, bank | Current and previous gameweek, until FPL confirms final points |
+| `player_gameweeks` | Each player's points, minutes and bonus per gameweek | Current and previous gameweek, until FPL confirms final points |
 | `profiles` | Each user's FPL team id and name | By the app, at onboarding |
 | `notification_prefs`, `push_subscriptions` | Which alerts each user wants; their devices | By the app, on the Notifications page |
 | `notifications_sent` | Every alert sent, so none goes out twice | By the alerts job |
@@ -132,6 +136,8 @@ Things worth knowing about FPL's data:
 
 - **Fetch fails with `401 Invalid API key`:** check the `SUPABASE_SECRET_KEY` secret is the secret key, not the publishable one.
 - **Fetch fails with `relation ... does not exist`:** the SQL in `supabase/migrations` hasn't been run yet.
+- **Fetch summary says "player points skipped":** run `supabase/migrations/20261003000001_player_gameweeks.sql` in the SQL Editor. Captain awards appear after the next fetch.
+- **League page says none of your leagues are followed:** add the league's id to `FPL_LEAGUE_IDS` in `.github/workflows/fetch.yml`.
 - **Fetch shows `skipped`:** FPL was down or mid-update (common around deadlines). The next run picks it up.
 - **FPL returns 403 to GitHub Actions:** FPL occasionally blocks cloud servers. Run the job from your laptop to confirm the code works; if the block persists, the fetch can move to another scheduler.
 - **"Account created, but Supabase is waiting for email confirmation":** turn off "Confirm email" (Setup, step 1.4). Accounts created before that can be confirmed by hand in **Authentication → Users**.
@@ -142,4 +148,4 @@ Things worth knowing about FPL's data:
 
 ## What's next
 
-Phase 4 of the plan: the league page for BiG ReD (table with movement, everyone's captains, who owns whom, differentials, weekly awards) and social alerts.
+Phase 5 of the plan: an expected-points model trained on past seasons, so the app can suggest captains and transfers.

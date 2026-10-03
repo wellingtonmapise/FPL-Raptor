@@ -63,11 +63,14 @@ class Database:
         columns: str = "*",
         filters: dict[str, str] | None = None,
         page_size: int = 1000,
+        limit: int | None = None,
     ) -> list[dict]:
-        """All matching rows, paging past Supabase's 1,000-row response cap.
+        """All matching rows (or the first `limit`), paging past Supabase's 1,000-row cap.
 
         filters use PostgREST syntax, e.g. {"gameweek_id": "eq.5"}.
         """
+        if limit is not None:
+            page_size = min(page_size, limit)
         rows: list[dict] = []
         offset = 0
         while True:
@@ -79,8 +82,8 @@ class Database:
             )
             page = resp.json()
             rows.extend(page)
-            if len(page) < page_size:
-                return rows
+            if len(page) < page_size or (limit is not None and len(rows) >= limit):
+                return rows[:limit] if limit is not None else rows
             offset += page_size
 
     def upsert(self, table: str, rows: Iterable[dict], on_conflict: str, chunk_size: int = 500) -> int:

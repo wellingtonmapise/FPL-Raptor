@@ -4,6 +4,7 @@ from raptor.fpl import (
     parse_fixtures,
     parse_gameweeks,
     parse_league,
+    parse_live,
     parse_picks,
     parse_players,
     parse_teams,
@@ -86,3 +87,9 @@ def test_parse_picks(picks_json):
         }
     ]
     assert [p["player_id"] for p in picks if p["multiplier"] == 0] == [404]
+
+
+def test_parse_live():
+    rows = parse_live(5, {"elements": [{"id": 303, "stats": {"total_points": 13, "minutes": 90, "bonus": 3}}, {"id": 9, "stats": {}}]}, NOW)
+    assert rows[0] == {"player_id": 303, "gameweek_id": 5, "points": 13, "minutes": 90, "bonus": 3, "updated_at": NOW}
+    assert rows[1]["points"] == 0 and rows[1]["minutes"] == 0

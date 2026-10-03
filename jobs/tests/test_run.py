@@ -76,3 +76,30 @@ def test_summary_explains_when_fpl_returns_no_squads(fake_fpl, fake_db):
     summary = run_once(fake_fpl, fake_db, SETTINGS)
     assert "squads for 3 managers (GW4: 0 saved, 3 not found; GW5: 0 saved, 3 not found)" in summary
     assert "FPL said 404 on entry/1001/event/5/picks/" in summary
+
+
+def test_player_points_saved_then_left_alone_once_final(fake_fpl, fake_db):
+    summary = run_once(fake_fpl, fake_db, SETTINGS)
+    rows = {(r["player_id"], r["gameweek_id"]): r for r in fake_db.rows("player_gameweeks")}
+    assert rows[(303, 5)]["points"] == 13 and rows[(303, 5)]["bonus"] == 3
+    assert "player points GW4, GW5" in summary
+
+    fake_fpl.live_calls.clear()
+    run_once(fake_fpl, fake_db, SETTINGS)
+    assert fake_fpl.live_calls == [5]  # GW4 is confirmed and stored; GW5 isn't confirmed yet
+
+
+def test_player_points_skip_politely_before_the_migration(fake_fpl, fake_db):
+    from raptor.db import SupabaseError
+
+    real_upsert = fake_db.upsert
+
+    def upsert(table, rows, on_conflict, chunk_size=500):
+        if table == "player_gameweeks":
+            raise SupabaseError('upsert player_gameweeks failed: HTTP 404 {"code":"PGRST205"}')
+        return real_upsert(table, rows, on_conflict, chunk_size)
+
+    fake_db.upsert = upsert
+    summary = run_once(fake_fpl, fake_db, SETTINGS)
+    assert "player points skipped (run supabase/migrations/20261003000001_player_gameweeks.sql)" in summary
+    assert len(fake_db.rows("picks")) == 24  # the rest of the run still happened

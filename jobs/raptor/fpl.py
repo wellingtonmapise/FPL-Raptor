@@ -118,6 +118,10 @@ class FplClient:
         """A squad for one gameweek. None if FPL has nothing for it (404)."""
         return self.get(f"entry/{team_id}/event/{gameweek_id}/picks/")
 
+    def live(self, gameweek_id: int) -> dict | None:
+        """Every player's points and minutes in one gameweek (updates during matches)."""
+        return self.get(f"event/{gameweek_id}/live/")
+
 
 # ---------------------------------------------------------------------------
 # Parsers: FPL JSON -> rows for our tables (see supabase/migrations)
@@ -266,6 +270,23 @@ def parse_picks(
         for p in data.get("picks", [])
     ]
     return entry_row, pick_rows
+
+
+def parse_live(gameweek_id: int, data: dict, now: str) -> list[dict]:
+    rows = []
+    for element in data.get("elements", []):
+        stats = element.get("stats") or {}
+        rows.append(
+            {
+                "player_id": element["id"],
+                "gameweek_id": gameweek_id,
+                "points": stats.get("total_points") or 0,
+                "minutes": stats.get("minutes") or 0,
+                "bonus": stats.get("bonus") or 0,
+                "updated_at": now,
+            }
+        )
+    return rows
 
 
 def format_price(tenths: int | None) -> str:

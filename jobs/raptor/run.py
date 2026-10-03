@@ -8,7 +8,8 @@ Each run:
   2. saves the standings of every league in FPL_LEAGUE_IDS
   3. saves squads for everyone being tracked (league members + app users)
      for the current and previous gameweek, until FPL confirms final points
-  4. logs the run in job_runs, so the app can show when data was last updated
+  4. saves every player's points for those gameweeks (captain awards)
+  5. logs the run in job_runs, so the app can show when data was last updated
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from datetime import datetime, timezone
 
 from raptor.changes import TRACKED_FIELDS, diff_players
 from raptor.config import Settings, load_settings
-from raptor.db import Database
+from raptor.db import Database, SupabaseError
 from raptor.fpl import (
     FplClient,
     FplUnavailable,
@@ -29,6 +30,7 @@ from raptor.fpl import (
     parse_fixtures,
     parse_gameweeks,
     parse_league,
+    parse_live,
     parse_picks,
     parse_players,
     parse_teams,
@@ -133,6 +135,32 @@ def sync_picks(fpl: FplClient, db: Database, bootstrap: dict, team_ids: set[int]
     }
 
 
+def sync_player_points(fpl: FplClient, db: Database, bootstrap: dict, now: str) -> str:
+    """Each player's points in the current and previous gameweek.
+
+    Refreshed every run while a gameweek can still change, then left alone
+    once FPL confirms it (finished and data_checked) and it's stored.
+    """
+    saved: list[str] = []
+    for gameweek in gameweeks_to_refresh(bootstrap):
+        gw_id = gameweek["id"]
+        final = bool(gameweek.get("finished") and gameweek.get("data_checked"))
+        try:
+            if final and db.select("player_gameweeks", "player_id", {"gameweek_id": f"eq.{gw_id}"}, limit=1):
+                continue
+            data = fpl.live(gw_id)
+            if not data:
+                continue
+            rows = parse_live(gw_id, data, now)
+            db.upsert("player_gameweeks", rows, on_conflict="player_id,gameweek_id")
+        except SupabaseError as exc:
+            if "PGRST205" in str(exc) or ("player_gameweeks" in str(exc) and "does not exist" in str(exc)):
+                return "player points skipped (run supabase/migrations/20261003000001_player_gameweeks.sql)"
+            raise
+        saved.append(f"GW{gw_id}")
+    return f"player points {', '.join(saved)}" if saved else "player points up to date"
+
+
 def describe_picks(picks: dict, fpl: FplClient) -> str:
     """'squads for 18 managers (GW5: 18 saved)', plus why when FPL refused."""
     if picks["tracked"] == 0:
@@ -157,11 +185,13 @@ def run_once(fpl: FplClient, db: Database, settings: Settings) -> str:
     static = sync_static(fpl, db, bootstrap, now)
     leagues = sync_leagues(fpl, db, settings.league_ids, now)
     picks = sync_picks(fpl, db, bootstrap, tracked_team_ids(db), now)
+    points = sync_player_points(fpl, db, bootstrap, now)
     return (
         f"players {static['players']} ({static['changes']} changes), "
         f"fixtures {static['fixtures']}, "
         f"leagues {leagues['leagues']} ({leagues['managers']} managers), "
         + describe_picks(picks, fpl)
+        + f", {points}"
     )
 
 

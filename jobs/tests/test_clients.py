@@ -142,3 +142,10 @@ def test_db_errors_raise():
     db = Database("https://x.supabase.co", "sb_secret_bad", session=session)
     with pytest.raises(SupabaseError, match="401"):
         db.select("players")
+
+
+def test_db_select_limit_stops_early():
+    session = FakeSession([FakeResponse(200, [{"id": 1}])])
+    db = Database("https://x.supabase.co", "sb_secret_abc", session=session)
+    assert db.select("player_gameweeks", "player_id", {"gameweek_id": "eq.4"}, limit=1) == [{"id": 1}]
+    assert session.calls[0][2]["params"]["limit"] == 1
