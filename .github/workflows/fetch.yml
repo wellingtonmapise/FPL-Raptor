@@ -1,0 +1,53 @@
+# Pulls the latest FPL data into Supabase every 3 hours.
+#
+# Needs two repository secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_URL         e.g. https://abcd1234.supabase.co
+#   SUPABASE_SECRET_KEY  the secret key (sb_secret_...) from Supabase -> Project Settings -> API Keys
+#
+# Run it by hand any time: Actions -> Fetch FPL data -> Run workflow.
+#
+# Note: GitHub pauses scheduled workflows in public repos after 60 days with
+# no commits. Any push turns it back on.
+
+name: Fetch FPL data
+
+on:
+  schedule:
+    # Times are UTC. Minute 17 avoids the top-of-the-hour rush, when GitHub
+    # often starts scheduled jobs late.
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two fetches at once.
+concurrency:
+  group: fetch-fpl
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: jobs
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      # Classic leagues to follow, comma-separated. 1086012 = BiG ReD.
+      FPL_LEAGUE_IDS: "1086012"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          working-directory: jobs
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Fetch FPL data into Supabase
+        run: uv run --no-dev python -m raptor.run

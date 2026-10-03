@@ -1,0 +1,5 @@
+[
+  {"id": 41, "event": 5, "kickoff_time": "2026-09-27T14:00:00Z", "team_h": 1, "team_a": 6, "team_h_difficulty": 4, "team_a_difficulty": 4, "team_h_score": 2, "team_a_score": 1, "started": true, "finished": true},
+  {"id": 52, "event": 6, "kickoff_time": "2026-10-04T16:30:00Z", "team_h": 14, "team_a": 1, "team_h_difficulty": 4, "team_a_difficulty": 5, "team_h_score": null, "team_a_score": null, "started": false, "finished": false},
+  {"id": 99, "event": null, "kickoff_time": null, "team_h": 6, "team_a": 14, "team_h_difficulty": 5, "team_a_difficulty": 3, "team_h_score": null, "team_a_score": null, "started": false, "finished": false}
+]

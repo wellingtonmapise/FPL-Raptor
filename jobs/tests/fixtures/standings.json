@@ -1,0 +1,13 @@
+{
+  "league": {"id": 777, "name": "Test League", "admin_entry": 1001},
+  "standings": {
+    "has_next": false,
+    "page": 1,
+    "results": [
+      {"entry": 1001, "entry_name": "Team One", "player_name": "Manager One", "rank": 1, "last_rank": 1, "total": 366, "event_total": 50},
+      {"entry": 1002, "entry_name": "Team Two", "player_name": "Manager Two", "rank": 2, "last_rank": 4, "total": 361, "event_total": 56},
+      {"entry": 1003, "entry_name": "Team Three", "player_name": "Manager Three", "rank": 3, "last_rank": 2, "total": 332, "event_total": 27}
+    ]
+  },
+  "last_updated_data": "2026-10-01T18:24:58Z"
+}

@@ -1,0 +1,41 @@
+# Checks every push and pull request: Python tests for the jobs, and a lint
+# plus production build for the web app. Needs no secrets.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  jobs-tests:
+    name: Jobs (Python tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          working-directory: jobs
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+
+  web-build:
+    name: Web app (lint and build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

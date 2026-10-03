@@ -1,0 +1,11 @@
+{
+  "active_chip": null,
+  "automatic_subs": [],
+  "entry_history": {"event": 5, "points": 50, "total_points": 366, "rank": 4565551, "overall_rank": 264742, "bank": 3, "value": 1009, "event_transfers": 1, "event_transfers_cost": 0, "points_on_bench": 6},
+  "picks": [
+    {"element": 101, "position": 1, "multiplier": 1, "is_captain": false, "is_vice_captain": false, "element_type": 1},
+    {"element": 303, "position": 2, "multiplier": 2, "is_captain": true, "is_vice_captain": false, "element_type": 4},
+    {"element": 202, "position": 3, "multiplier": 1, "is_captain": false, "is_vice_captain": true, "element_type": 3},
+    {"element": 404, "position": 12, "multiplier": 0, "is_captain": false, "is_vice_captain": false, "element_type": 2}
+  ]
+}
