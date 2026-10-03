@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from raptor.alerts import awards_message, captain_roundup_message, rival_of, run_alerts
+from raptor.alerts import awards_message, captain_roundup_message, recap_message, rival_of, run_alerts
 
 NOW = datetime(2026, 10, 10, 14, 0, tzinfo=timezone.utc)  # 4 hours after the GW6 deadline
 LEAGUE = {"id": 777, "name": "BiG ReD"}
@@ -112,3 +112,31 @@ def test_awards_wait_for_player_points(db):
     sender = RecordingSender()
     run_alerts(db, sender, NOW + timedelta(days=3))
     assert sender.sent == []
+
+
+def test_recap_pushed_once_while_fresh(db):
+    finish_gameweek(db)
+    body = "Wellington captained Salah and got 4 points for it. " * 6
+    db.rows("recaps").append({"league_id": 777, "gameweek_id": 6, "title": "Salah Sinks the Banker", "body": body, "created_at": "2026-10-12T09:00:00+00:00"})
+    sender = RecordingSender()
+    run_alerts(db, sender, NOW + timedelta(days=3))
+    recap = next(m for m in sender.sent if m["tag"] == "league-recap-777-gw6")
+    assert recap["title"] == "BiG ReD GW6: Salah Sinks the Banker"
+    assert len(recap["body"]) <= 180 and recap["body"].endswith("…")
+    assert recap["url"] == "/league/777#recap"
+    sender.sent.clear()
+    run_alerts(db, sender, NOW + timedelta(days=3, minutes=15))
+    assert sender.sent == []
+
+
+def test_stale_recap_not_pushed(db):
+    finish_gameweek(db)
+    db.rows("recaps").append({"league_id": 777, "gameweek_id": 6, "title": "Old", "body": "Old news.", "created_at": "2026-10-01T09:00:00+00:00"})
+    sender = RecordingSender()
+    run_alerts(db, sender, NOW + timedelta(days=3))
+    assert all(m["tag"] != "league-recap-777-gw6" for m in sender.sent)
+
+
+def test_recap_message_short_body():
+    msg = recap_message(LEAGUE, {"gameweek_id": 6, "title": "T", "body": "Short\n\nand sweet."})
+    assert msg["body"] == "Short and sweet."

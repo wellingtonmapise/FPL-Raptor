@@ -1,5 +1,6 @@
 # Pulls the latest FPL data into Supabase every 3 hours, refreshes the model's
-# expected points for the next five gameweeks, then re-plans every user's transfers.
+# expected points for the next five gameweeks, re-plans every user's transfers,
+# and writes each league's AI recap once a gameweek's points are final.
 #
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions):
 #   SUPABASE_URL         e.g. https://abcd1234.supabase.co
@@ -21,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  models: read # GitHub Models, for the AI gameweek recaps (free, no key needed)
 
 # Never run two fetches at once.
 concurrency:
@@ -58,3 +60,9 @@ jobs:
 
       - name: Plan transfers for every user (next 4 gameweeks)
         run: uv run --no-dev python -m raptor.optimizer.run
+
+      - name: Write gameweek recaps (once a gameweek is final)
+        if: ${{ !cancelled() }} # even if planning failed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run --no-dev python -m raptor.recaps

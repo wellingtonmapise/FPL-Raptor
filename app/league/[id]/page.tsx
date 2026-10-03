@@ -70,7 +70,7 @@ export default async function LeaguePage({
   const userId = await currentUserId(supabase);
   if (!userId) redirect(`/login?next=/league/${leagueId}`);
 
-  const [{ data: profile }, { data: league }, { data: memberRows }] =
+  const [{ data: profile }, { data: league }, { data: memberRows }, recapRes] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -89,7 +89,16 @@ export default async function LeaguePage({
         )
         .eq("league_id", leagueId)
         .order("rank"),
+      // Missing until migration 0004 has run: the card just stays hidden.
+      supabase
+        .from("recaps")
+        .select("gameweek_id,title,body,model")
+        .eq("league_id", leagueId)
+        .order("gameweek_id", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ gameweek_id: number; title: string; body: string; model: string }>(),
     ]);
+  const recap = recapRes.error ? null : recapRes.data;
   if (!league) notFound();
   const members = (memberRows ?? []) as Member[];
   const myTeamId = profile?.fpl_team_id ?? null;
@@ -179,6 +188,30 @@ export default async function LeaguePage({
             .join(" · ")}
         </p>
       </header>
+
+      {recap && (
+        <section
+          id="recap"
+          className="scroll-mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/60"
+        >
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            GW{recap.gameweek_id} recap
+          </div>
+          <h2 className="mt-1 text-lg font-bold leading-snug">{recap.title}</h2>
+          <div className="mt-2 space-y-3 text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+            {recap.body
+              .split(/\n\s*\n/)
+              .filter((p) => p.trim())
+              .map((p, i) => (
+                <p key={i}>{p.trim()}</p>
+              ))}
+          </div>
+          <p className="mt-3 text-xs text-zinc-500">
+            Written by AI ({recap.model.replace(/^openai\//, "")} on GitHub Models) from the gameweek&apos;s
+            numbers, in full roast mode. It only knows the stats, so don&apos;t take it personally.
+          </p>
+        </section>
+      )}
 
       {rival && (
         <Card

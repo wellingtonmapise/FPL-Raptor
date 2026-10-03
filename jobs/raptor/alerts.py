@@ -8,8 +8,9 @@ Each run:
     another when it's under 75 minutes away (the window absorbs late runs)
   * team news: injury/availability changes for players in your squad
   * price changes for players in your squad
-  * mini-league: a captain round-up after each deadline, and the weekly
-    awards once FPL confirms the gameweek's points
+  * mini-league: a captain round-up after each deadline, the weekly
+    awards once FPL confirms the gameweek's points, and the AI recap once
+    it's written (raptor/recaps.py)
 
 notifications_sent records every alert key, so nothing goes out twice, and
 notification_prefs lets each user switch types off (everything is on unless
@@ -235,6 +236,19 @@ def awards_message(
     }
 
 
+def recap_message(league: dict, recap: dict) -> dict:
+    """The push for a league's AI recap: its headline and opening lines."""
+    body = " ".join(recap["body"].split())
+    if len(body) > 180:
+        body = body[:177].rsplit(" ", 1)[0] + "…"
+    return {
+        "title": f"{league['name']} GW{recap['gameweek_id']}: {recap['title']}",
+        "body": body,
+        "url": f"/league/{league['id']}#recap",
+        "tag": f"league-recap-{league['id']}-gw{recap['gameweek_id']}",
+    }
+
+
 def ordinal(n: int) -> str:
     suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suffix}"
@@ -324,6 +338,7 @@ def _in(values) -> str:
 
 
 ROUNDUP_WINDOW = timedelta(hours=48)  # captain round-ups only for a fresh deadline
+RECAP_WINDOW = timedelta(hours=72)  # recaps are pushed only while fresh
 COVERAGE = 0.75  # share of the league's squads needed before sending
 
 
@@ -373,6 +388,16 @@ def league_alerts(
         else {}
     )
     points: dict[int, int] = {}
+    recaps: dict[int, dict] = {}
+    if final:
+        try:
+            recaps = {
+                r["league_id"]: r
+                for r in db.select("recaps", "league_id,gameweek_id,title,body,created_at", {"gameweek_id": f"eq.{gw}", "league_id": _in(league_ids)})
+                if now - datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")) <= RECAP_WINDOW
+            }
+        except SupabaseError:  # table missing until migration 0004 runs
+            recaps = {}
     if final and captain_ids:
         try:
             points = {
@@ -410,6 +435,10 @@ def league_alerts(
                         }
                         msg = awards_message(league, gw, members, league_entries, caps, team)
                         outbox.send(user, "league", [key], msg, ttl=24 * 3600)
+                if league_id in recaps:
+                    key = f"league_recap:{league_id}:gw{gw}"
+                    if (user, key) not in sent:
+                        outbox.send(user, "league", [key], recap_message(league, recaps[league_id]), ttl=24 * 3600)
 
 
 def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
