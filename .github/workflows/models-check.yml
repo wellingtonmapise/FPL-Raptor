@@ -1,0 +1,29 @@
+name: Models check (temporary)
+on: workflow_dispatch
+permissions:
+  contents: read
+  models: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call GitHub Models with curl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          out=$(curl -sS -i -X POST "https://models.github.ai/inference/chat/completions" \
+            -H "Content-Type: application/json" -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -d '{"model":"openai/gpt-4o","messages":[{"role":"user","content":"Say hello in three words."}]}' 2>&1 | head -c 1500)
+          echo "::notice title=curl::$(echo "$out" | tr '\r\n' '  ' | head -c 1400)"
+      - name: Same with Python requests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os, requests
+          r = requests.post("https://models.github.ai/inference/chat/completions",
+              headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "Accept": "application/vnd.github+json",
+                       "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json"},
+              json={"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Say hello in three words."}]}, timeout=60)
+          print(f"::notice title=requests::{r.status_code} {r.url} {dict(r.headers)} {r.text[:600]!r}".replace("\n", " "))
+          PY
