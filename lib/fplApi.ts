@@ -69,3 +69,13 @@ export type FplPicks = {
 export function getPicks(teamId: number, gameweekId: number) {
   return getJson<FplPicks>(`entry/${teamId}/event/${gameweekId}/picks/`, 300);
 }
+
+/** Every player's live points and stats for a gameweek (about 1 MB). */
+export function getLive(gameweekId: number) {
+  return getJson<{ elements: import("@/lib/live").LiveElement[] }>(`event/${gameweekId}/live/`, 60);
+}
+
+/** A gameweek's matches with live scores, minutes and BPS. */
+export function getEventFixtures(gameweekId: number) {
+  return getJson<import("@/lib/live").LiveFixture[]>(`fixtures/?event=${gameweekId}`, 60);
+}
