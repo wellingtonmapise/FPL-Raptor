@@ -2,7 +2,7 @@
 
 A free, installable web app for Fantasy Premier League: deadline countdowns, alerts about your players, transfer ideas, and a mini-league page built for banter with friends.
 
-Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, push notifications on an installable app, and a mini-league page. Later phases (points model, transfer optimizer) build on top of it.
+Built so far: the database, a scheduled job that pulls FPL data into it, sign-in, a My gameweek page, push notifications on an installable app, a mini-league page, and an expected-points model. Next up: a transfer optimizer built on the model.
 
 ## What's in here
 
@@ -15,6 +15,8 @@ FPL-Raptor/
 ├── proxy.ts                 Refreshes the sign-in session on every request
 ├── jobs/                    Python: the scheduled FPL -> Supabase fetch
 │   ├── raptor/              fpl.py (API + parsing), db.py, changes.py, run.py (fetch), alerts.py (push)
+│   ├── raptor/model/        expected-points model: history.py, features.py, train.py, predict.py
+│   ├── model/               the trained model (xpts.joblib), its metadata, and REPORT.md
 │   └── tests/               pytest, using small made-up FPL responses
 ├── supabase/migrations/     SQL that creates every table and its access rules
 └── .github/workflows/       fetch.yml (every 3 hours), alerts.yml (every 15 minutes), ci.yml (tests + build)
@@ -108,6 +110,31 @@ cp .env.example .env           # then fill in the values
 uv run --env-file .env python -m raptor.run
 ```
 
+## The expected-points model
+
+Predicts every player's points for each of the next five gameweeks. Gradient-boosted trees
+(scikit-learn) trained on four seasons of FPL history (2022/23 to 2025/26, about 113,000
+player-fixtures) from the public [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League)
+dataset, using recent form, xG/xA, minutes, bonus, defensive contributions, price, position,
+home/away, fixture difficulty and both teams' recent goals and xG.
+
+In backtests on matches it never saw, it beats recent form and FPL's own pre-match xP on accuracy
+and on ranking players. **[jobs/model/REPORT.md](jobs/model/REPORT.md)** has the numbers, how
+they were measured, and the limits.
+
+- **Live:** after every fetch, `raptor.model.predict` rebuilds this season's history from FPL's
+  live data, predicts the next five gameweeks, scales by FPL's chance of playing, and saves to
+  `predictions`. My gameweek shows each player's xP, the model's captain pick and your XI's
+  expected total; deadline reminders include the pick.
+- **Retrain** (e.g. each summer, once the dataset has the new season):
+
+  ```bash
+  cd jobs
+  uv run python -m raptor.model.train   # downloads history, backtests, saves jobs/model/
+  ```
+
+  Commit the updated `jobs/model/` files; the next fetch uses them.
+
 ## How the data works
 
 | Table | What's in it | Written |
@@ -117,11 +144,11 @@ uv run --env-file .env python -m raptor.run
 | `leagues`, `league_members` | Standings of followed leagues | Every run |
 | `entry_gameweeks`, `picks` | Each tracked manager's squad, captain, chip, points, bank | Current and previous gameweek, until FPL confirms final points |
 | `player_gameweeks` | Each player's points, minutes and bonus per gameweek | Current and previous gameweek, until FPL confirms final points |
+| `predictions` | Expected points per player for each of the next five gameweeks | After every fetch, by the model |
 | `profiles` | Each user's FPL team id and name | By the app, at onboarding |
 | `notification_prefs`, `push_subscriptions` | Which alerts each user wants; their devices | By the app, on the Notifications page |
 | `notifications_sent` | Every alert sent, so none goes out twice | By the alerts job |
-| `predictions` | Expected points per player per gameweek | By the model (Phase 5) |
-| `job_runs` | One row per fetch or alerts run, with status and a summary | Every run |
+| `job_runs` | One row per fetch, prediction or alerts run, with status and a summary | Every run |
 
 Things worth knowing about FPL's data:
 
@@ -148,4 +175,4 @@ Things worth knowing about FPL's data:
 
 ## What's next
 
-Phase 5 of the plan: an expected-points model trained on past seasons, so the app can suggest captains and transfers.
+Phase 6 of the plan: a transfer optimizer (integer programming) that uses the model's predictions to suggest transfers over the next few gameweeks, including whether a −4 hit is worth it.

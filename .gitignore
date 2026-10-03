@@ -46,3 +46,6 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+
+# downloaded training data
+jobs/.cache/

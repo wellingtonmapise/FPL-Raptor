@@ -161,3 +161,31 @@ describe("supabaseEnv", () => {
     expect(supabaseEnv()).toBeNull();
   });
 });
+
+describe("predictions", () => {
+  it("keeps the newest prediction per player", async () => {
+    const { latestPredictions } = await import("@/lib/gameweek");
+    const xp = latestPredictions([
+      { player_id: 9, expected_points: 6.1, created_at: "2026-10-03T12:00:00+00:00" },
+      { player_id: 9, expected_points: 7.4, created_at: "2026-10-03T15:00:00+00:00" },
+      { player_id: 7, expected_points: 5.2, created_at: "2026-10-03T15:00:00+00:00" },
+    ]);
+    expect(xp.get(9)).toBe(7.4);
+    expect(xp.get(7)).toBe(5.2);
+  });
+
+  it("ranks captain options and totals the XI with the captain doubled", async () => {
+    const { buildSquad, captainOptions, expectedXI } = await import("@/lib/gameweek");
+    const players = [1, 2, 3].map((id) => ({ id, web_name: `P${id}`, team_id: 1, position: 3, now_cost: 60, status: "a", news: "", chance_of_playing_next_round: null }));
+    const squad = buildSquad(
+      [1, 2, 3].map((id, i) => ({ player_id: id, squad_position: i === 2 ? 12 : i + 1, multiplier: 1, is_captain: false, is_vice_captain: false })),
+      players,
+      teams,
+      [],
+    );
+    const xp = new Map([[1, 4], [2, 6.5], [3, 9]]);
+    expect(captainOptions(squad.starters, xp).map((o) => o.player.player_id)).toEqual([2, 1]); // 3 is benched
+    expect(expectedXI(squad.starters, xp)).toBe(4 + 6.5 + 6.5);
+    expect(expectedXI(squad.starters, new Map())).toBeNull();
+  });
+});

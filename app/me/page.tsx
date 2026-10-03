@@ -7,11 +7,15 @@ import { formatPrice } from "@/lib/fpl";
 import { getEntry, getPicks } from "@/lib/fplApi";
 import {
   buildSquad,
+  captainOptions,
   CHIP_NAMES,
+  expectedXI,
+  latestPredictions,
   nextGameweek,
   type Fixture,
   type Pick,
   type Player,
+  type PredictionRow,
   type Team,
 } from "@/lib/gameweek";
 import { createClient, currentUserId } from "@/lib/supabase/server";
@@ -119,15 +123,23 @@ export default async function MyGameweekPage() {
     }
   }
 
-  const [playersRes, fixturesRes] = await Promise.all([
+  const playerIds = picks.map((p) => p.player_id);
+  const [playersRes, fixturesRes, predictionsRes] = await Promise.all([
     picks.length
-      ? supabase.from("players").select(PLAYER_COLUMNS).in("id", picks.map((p) => p.player_id))
+      ? supabase.from("players").select(PLAYER_COLUMNS).in("id", playerIds)
       : Promise.resolve({ data: [] }),
     next
       ? supabase
           .from("fixtures")
           .select("id,gameweek_id,home_team_id,away_team_id,home_difficulty,away_difficulty,kickoff_time")
           .eq("gameweek_id", next.id)
+      : Promise.resolve({ data: [] }),
+    next && picks.length
+      ? supabase
+          .from("predictions")
+          .select("player_id,expected_points,created_at")
+          .eq("gameweek_id", next.id)
+          .in("player_id", playerIds)
       : Promise.resolve({ data: [] }),
   ]);
   const squad = buildSquad(
@@ -136,6 +148,9 @@ export default async function MyGameweekPage() {
     teams,
     (fixturesRes.data ?? []) as Fixture[],
   );
+  const xp = latestPredictions((predictionsRes.data ?? []) as PredictionRow[]);
+  const captains = captainOptions(squad.starters, xp).slice(0, 3);
+  const xiTotal = expectedXI(squad.starters, xp);
 
   const teamName = entry.ok ? entry.data.name : null;
   const managerName = entry.ok
@@ -202,6 +217,34 @@ export default async function MyGameweekPage() {
         </Card>
       )}
 
+      {next && captains.length > 0 && (
+        <Card title={`${next.name} captain`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-lg font-semibold">
+              {captains[0].player.player?.web_name}{" "}
+              <span className="text-base font-normal text-zinc-500">{captains[0].xp.toFixed(1)} xP</span>
+            </p>
+            {xiTotal !== null && (
+              <span className="text-sm text-zinc-500">XI: {xiTotal.toFixed(1)} xP</span>
+            )}
+          </div>
+          {captains.length > 1 && (
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Then{" "}
+              {captains
+                .slice(1)
+                .map((c) => `${c.player.player?.web_name} ${c.xp.toFixed(1)}`)
+                .join(", ")}
+              .
+            </p>
+          )}
+          <p className="mt-3 text-xs text-zinc-500">
+            Expected points from the FPL Raptor model, scaled by FPL&apos;s chance of playing. Based on
+            your {current?.name} team.
+          </p>
+        </Card>
+      )}
+
       {stats && current && (
         <Card title={`${current.name}${stats.active_chip ? ` · ${CHIP_NAMES[stats.active_chip] ?? stats.active_chip}` : ""}`}>
           <div className="grid grid-cols-3 gap-4">
@@ -227,9 +270,9 @@ export default async function MyGameweekPage() {
               {next ? ` · ${next.name} fixtures` : ""}
             </span>
           </div>
-          <SquadList players={squad.starters} />
+          <SquadList players={squad.starters} xp={xp} />
           <h2 className="mt-4 mb-1 font-semibold">Bench</h2>
-          <SquadList players={squad.bench} dim />
+          <SquadList players={squad.bench} dim xp={xp} />
           <p className="mt-4 text-xs text-zinc-500">
             Your team as of the {current?.name} deadline. FPL doesn&apos;t share transfers until the next
             deadline passes.

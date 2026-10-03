@@ -1,0 +1,60 @@
+{
+  "version": "gbm-2026-10-03",
+  "features": [
+    "position",
+    "value",
+    "was_home",
+    "difficulty",
+    "dc_regime",
+    "games_so_far",
+    "season_points_per_game",
+    "season_minutes_per_game",
+    "points_l3",
+    "points_l6",
+    "minutes_l3",
+    "minutes_l6",
+    "starts_l3",
+    "starts_l6",
+    "xg_l3",
+    "xg_l6",
+    "xa_l3",
+    "xa_l6",
+    "xgc_l3",
+    "xgc_l6",
+    "bps_l3",
+    "bps_l6",
+    "bonus_l3",
+    "bonus_l6",
+    "ict_l3",
+    "ict_l6",
+    "dc_l3",
+    "dc_l6",
+    "team_gf_l6",
+    "team_ga_l6",
+    "opp_gf_l6",
+    "opp_ga_l6",
+    "team_xg_l6",
+    "team_xga_l6",
+    "opp_xg_l6",
+    "opp_xga_l6"
+  ],
+  "trained_on": [
+    "2022-23",
+    "2023-24",
+    "2024-25",
+    "2025-26"
+  ],
+  "rows": 113260,
+  "iterations": 132,
+  "sklearn": "1.9.1",
+  "backtests": {
+    "A": [
+      "2025-26",
+      20
+    ],
+    "B": [
+      "2024-25",
+      20
+    ]
+  }
+}

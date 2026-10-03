@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Python jobs (and their virtualenv) aren't part of the web app.
+    "jobs/**",
   ]),
 ]);
 

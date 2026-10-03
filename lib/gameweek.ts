@@ -119,3 +119,30 @@ export function nextGameweek<T extends { is_next: boolean; deadline_time: string
     null
   );
 }
+
+export type PredictionRow = { player_id: number; expected_points: number; created_at: string };
+
+/** Newest prediction per player (older model runs stay in the table). */
+export function latestPredictions(rows: PredictionRow[]): Map<number, number> {
+  const newest = new Map<number, PredictionRow>();
+  for (const row of rows) {
+    const seen = newest.get(row.player_id);
+    if (!seen || row.created_at > seen.created_at) newest.set(row.player_id, row);
+  }
+  return new Map([...newest].map(([id, row]) => [id, Number(row.expected_points)]));
+}
+
+/** Starters ranked by expected points: the model's captain options. */
+export function captainOptions(starters: SquadPlayer[], xp: Map<number, number>): { player: SquadPlayer; xp: number }[] {
+  return starters
+    .filter((sp) => xp.has(sp.player_id))
+    .map((sp) => ({ player: sp, xp: xp.get(sp.player_id)! }))
+    .sort((a, b) => b.xp - a.xp);
+}
+
+/** Expected points for the starting XI, with the best option as captain (doubled). */
+export function expectedXI(starters: SquadPlayer[], xp: Map<number, number>): number | null {
+  const values = starters.map((sp) => xp.get(sp.player_id)).filter((v): v is number => v !== undefined);
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) + Math.max(...values);
+}

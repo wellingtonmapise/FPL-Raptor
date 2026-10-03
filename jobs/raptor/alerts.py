@@ -67,7 +67,14 @@ def time_left(seconds: float) -> str:
     return f"{max(1, round(seconds / 60))} minutes"
 
 
-def deadline_message(gameweek_id: int, seconds_left: float, last_call: bool, squad: list[dict] | None) -> dict:
+def deadline_message(
+    gameweek_id: int,
+    seconds_left: float,
+    last_call: bool,
+    squad: list[dict] | None,
+    suggestion: tuple[str, float] | None = None,
+) -> dict:
+    """suggestion: the model's captain pick for this gameweek, (name, expected points)."""
     title = f"GW{gameweek_id} deadline in {time_left(seconds_left)}"
     lines = []
     if squad:
@@ -77,6 +84,8 @@ def deadline_message(gameweek_id: int, seconds_left: float, last_call: bool, squ
         captain = next((p for p in squad if p.get("is_captain")), None)
         if captain:
             lines.append(f"Captain: {captain['web_name']}.")
+    if suggestion:
+        lines.append(f"Model's pick: {suggestion[0]} ({suggestion[1]:.1f} xP).")
     lines.insert(0, "Last chance for transfers and your captain." if last_call else "Time to plan your transfers.")
     return {"title": title, "body": " ".join(lines), "url": "/me", "tag": f"deadline-gw{gameweek_id}"}
 
@@ -413,7 +422,7 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
     if current and team_ids:
         picks = db.select(
             "picks",
-            "team_id,player_id,is_captain",
+            "team_id,player_id,is_captain,multiplier",
             {"gameweek_id": f"eq.{current['id']}", "team_id": _in(sorted(team_ids))},
         )
         player_ids = sorted({p["player_id"] for p in picks})
@@ -425,12 +434,31 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
         by_team: dict[int, list[dict]] = {}
         for pick in picks:
             if pick["player_id"] in players:
-                by_team.setdefault(pick["team_id"], []).append({**players[pick["player_id"]], "is_captain": pick["is_captain"]})
+                by_team.setdefault(pick["team_id"], []).append(
+                    {**players[pick["player_id"]], "is_captain": pick["is_captain"], "starting": (pick.get("multiplier") or 0) > 0}
+                )
         for user, team in profiles.items():
             if team in by_team:
                 squads[user] = by_team[team]
 
     outbox = Outbox(sender=sender, db=db, now=now_iso, subs_by_user=subs_by_user)
+
+    # The model's expected points for the next gameweek (newest run per player).
+    xp: dict[int, float] = {}
+    squad_ids = sorted({p["id"] for squad in squads.values() for p in squad})
+    if next_gw and squad_ids:
+        newest: dict[int, dict] = {}
+        for row in db.select(
+            "predictions", "player_id,expected_points,created_at",
+            {"gameweek_id": f"eq.{next_gw['id']}", "player_id": _in(squad_ids)},
+        ):
+            if row["player_id"] not in newest or row["created_at"] > newest[row["player_id"]]["created_at"]:
+                newest[row["player_id"]] = row
+        xp = {pid: float(r["expected_points"]) for pid, r in newest.items()}
+
+    def suggestion_for(user: str) -> tuple[str, float] | None:
+        options = [(p["web_name"], xp[p["id"]]) for p in squads.get(user, []) if p.get("starting") and p["id"] in xp]
+        return max(options, key=lambda o: o[1]) if options else None
 
     # 1. Deadline reminders
     if next_gw:
@@ -441,7 +469,7 @@ def run_alerts(db: Database, sender: PushSender, now: datetime) -> str:
             key = f"{kind}:gw{next_gw['id']}"
             for user in users:
                 if wants(user, kind) and (user, key) not in sent:
-                    payload = deadline_message(next_gw["id"], seconds, kind == "deadline_1h", squads.get(user))
+                    payload = deadline_message(next_gw["id"], seconds, kind == "deadline_1h", squads.get(user), suggestion_for(user))
                     outbox.send(user, kind, [key], payload, ttl=int(seconds), urgency="high" if kind == "deadline_1h" else "normal")
 
     # 2. Team news and price changes for squad players

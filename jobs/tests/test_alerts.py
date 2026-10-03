@@ -53,9 +53,9 @@ def db(fake_db):
     )
     fake_db.rows("picks").extend(
         [
-            {"team_id": 1001, "gameweek_id": 5, "player_id": 9, "is_captain": True},
-            {"team_id": 1001, "gameweek_id": 5, "player_id": 5, "is_captain": False},
-            {"team_id": 1001, "gameweek_id": 5, "player_id": 13, "is_captain": False},
+            {"team_id": 1001, "gameweek_id": 5, "player_id": 9, "is_captain": True, "multiplier": 2},
+            {"team_id": 1001, "gameweek_id": 5, "player_id": 5, "is_captain": False, "multiplier": 1},
+            {"team_id": 1001, "gameweek_id": 5, "player_id": 13, "is_captain": False, "multiplier": 0},
         ]
     )
     return fake_db
@@ -178,3 +178,18 @@ def test_errors_are_retried_next_run(db):
 
 def test_nobody_subscribed(fake_db):
     assert run_alerts(fake_db, RecordingSender(), NOW) == "no devices signed up for notifications"
+
+
+def test_deadline_reminder_includes_the_models_captain(db):
+    db.rows("predictions").extend(
+        [
+            {"player_id": 9, "gameweek_id": 6, "expected_points": 6.1, "created_at": "2026-10-09T09:00:00+00:00"},
+            {"player_id": 9, "gameweek_id": 6, "expected_points": 7.8, "created_at": "2026-10-09T11:00:00+00:00"},
+            {"player_id": 5, "gameweek_id": 6, "expected_points": 5.4, "created_at": "2026-10-09T11:00:00+00:00"},
+            {"player_id": 13, "gameweek_id": 6, "expected_points": 9.9, "created_at": "2026-10-09T11:00:00+00:00"},
+        ]
+    )
+    sender = RecordingSender()
+    run_alerts(db, sender, NOW)
+    # Timber has the highest xP but is on the bench, so the pick is Haaland (newest run).
+    assert sender.sent[0]["payload"]["body"].endswith("Model's pick: Haaland (7.8 xP).")
