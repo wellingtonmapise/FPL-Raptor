@@ -18,6 +18,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Pure data-shaping logic lives in `lib/` with Vitest tests (`lib/*.test.ts`).
 - Checks: `npm run lint && npm test && npm run build` for the app; `cd jobs && uv run pytest` for the jobs.
 - Push: `public/sw.js` shows notifications; `jobs/raptor/alerts.py` decides and sends them (every 15 min); the public VAPID key is in `lib/pushConfig.ts`, the private key only in secrets.
+- Scheduling: Supabase pg_cron calls GitHub's workflow_dispatch for `alerts.yml` (every 15 min) and `fetch.yml` (every 3 h) via `private.dispatch_workflow`, with a fine-grained token in Vault (`github_dispatch_token`); GitHub's own cron is only a backup because it runs hours late. Keep both workflows dispatchable and in their concurrency groups.
 - League maths (awards, captains, ownership, rival) lives in `lib/league.ts`; the alerts job has a small Python twin for league pushes.
 - Model: features in `jobs/raptor/model/features.py` are shared by training and live prediction; change them in one place and retrain (`uv run python -m raptor.model.train`) so `jobs/model/` matches.
 - Optimizer: `jobs/raptor/optimizer/solve.py` is the integer program (PuLP 2.x with bundled CBC; pulp 3+/4 changed the API, so it's pinned `<3`). `inputs.py` derives free transfers, bank and selling prices from public FPL history. The web app reads the saved plan via `lib/plan.ts`.

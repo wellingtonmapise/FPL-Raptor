@@ -32,7 +32,7 @@ Everything runs on free tiers: Vercel (web app), Supabase (database and sign-in)
 ### 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com) (sign in with GitHub, pick a US East region).
-2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql`, `20261003000002_transfer_plans.sql`, `20261003000003_scout_and_recaps.sql`, `20261003000004_planner_drafts.sql` and `20261003000005_recap_cards.sql`.
+2. Open **SQL Editor → New query**, paste all of `supabase/migrations/20261003000000_init.sql`, and click **Run**. Then do the same with every later file in `supabase/migrations`, in order (each one is a new query). Today that's `20261003000001_player_gameweeks.sql`, `20261003000002_transfer_plans.sql`, `20261003000003_scout_and_recaps.sql`, `20261003000004_planner_drafts.sql`, `20261003000005_recap_cards.sql` and `20261005000000_schedule_via_supabase.sql` (that last one needs a GitHub token; see step 5).
 3. From **Project Settings → API Keys** (or the **Connect** button), note three values:
    - the project URL, like `https://abcd1234.supabase.co`
    - the **publishable key** (`sb_publishable_...`): for the web app; safe to expose
@@ -66,6 +66,30 @@ Pushes are signed with a VAPID key pair. The public half is in `lib/pushConfig.t
 2. **Vercel:** add an environment variable `VAPID_PRIVATE_KEY` with the same value, then redeploy. The **Send a test notification** button uses it.
 
 To make a new pair: `npx web-push generate-vapid-keys`. Put the private key in both places above and set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in Vercel to the new public key. Everyone then needs to turn notifications on again.
+
+### 5. Running the jobs on time
+
+GitHub starts scheduled workflows late when it's busy, often by hours, so a "1 hour to the deadline" reminder can arrive after the deadline. Workflows started on demand aren't held back, so Supabase's scheduler starts them instead: alerts every 15 minutes, the fetch every 3 hours. GitHub's own schedules stay on as a backup.
+
+1. **Make a GitHub token.** GitHub → your picture → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**. Name it `FPL Raptor scheduler`, set an expiry (up to a year), under **Repository access** choose **Only select repositories** and pick this repo, and under **Permissions → Repository permissions** set **Actions** to **Read and write**. Generate it and copy it (it starts `github_pat_`).
+2. **Run the SQL.** In Supabase's **SQL Editor**, run `supabase/migrations/20261005000000_schedule_via_supabase.sql`. It turns on `pg_cron` and `pg_net` and adds the three scheduled jobs.
+3. **Store the token in Vault.** In a new SQL Editor query, run this with your token between the quotes:
+
+   ```sql
+   select vault.create_secret('github_pat_...', 'github_dispatch_token');
+   ```
+
+   It's stored encrypted. Don't commit it or paste it anywhere else. To replace it later (when it expires): `select vault.update_secret((select id from vault.secrets where name = 'github_dispatch_token'), 'new token');`
+
+To check it's working, look at **Actions**: runs started this way are labelled `workflow_dispatch`. Or, in the SQL Editor:
+
+```sql
+select jobname, status, return_message, start_time from cron.job_run_details
+  join cron.job using (jobid) order by start_time desc limit 5;
+select status_code, content, created from net._http_response order by created desc limit 5;
+```
+
+`status_code` 204 means GitHub queued the run; 401 means the token is wrong or expired; 403 or 404 means it lacks **Actions: Read and write** on this repo.
 
 ## Using the app
 

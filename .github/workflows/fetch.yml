@@ -8,6 +8,8 @@
 # and, for the AI recaps, GEMINI_API_KEY (free, from Google AI Studio).
 #
 # Run it by hand any time: Actions -> Fetch FPL data -> Run workflow.
+# Supabase starts it on time (see README, "Running the jobs on time"); the
+# schedule below is a backup, since GitHub often runs it hours late.
 #
 # Note: GitHub pauses scheduled workflows in public repos after 60 days with
 # no commits. Any push turns it back on.

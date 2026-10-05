@@ -5,6 +5,9 @@
 #   SUPABASE_URL, SUPABASE_SECRET_KEY   same as the fetch
 #   VAPID_PRIVATE_KEY                   the private push key (see README)
 # Until VAPID_PRIVATE_KEY is set, runs finish straight away without sending.
+#
+# Supabase starts this on time (see README, "Running the jobs on time"); the
+# schedule below is a backup, since GitHub often runs it hours late.
 
 name: Send alerts
 
