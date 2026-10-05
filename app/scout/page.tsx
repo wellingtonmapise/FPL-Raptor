@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import AskRaptor from "@/components/AskRaptor";
 import PlayerLink from "@/components/PlayerLink";
+import { starterQuestions } from "@/lib/ask/prompt";
 import { formatPrice, POSITIONS } from "@/lib/fpl";
 import type { Fixture, Team } from "@/lib/gameweek";
 import {
@@ -17,11 +19,13 @@ import {
   type Sort,
   type TickerCell,
 } from "@/lib/scout";
+import { leagueOwnership } from "@/lib/leagueOwnership";
+import type { TransferPlanRow } from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Scout · FPL Raptor" };
 
-type View = "fixtures" | "stats" | "differentials";
+type View = "fixtures" | "stats" | "differentials" | "ask";
 type Params = { view: View; weeks: number; pos: number; sort: Sort; range: Range };
 type Gameweek = { id: number; name: string; deadline_time: string; is_next: boolean; finished: boolean };
 
@@ -29,6 +33,7 @@ const VIEWS: { id: View; label: string }[] = [
   { id: "fixtures", label: "Fixtures" },
   { id: "stats", label: "Stats" },
   { id: "differentials", label: "Differentials" },
+  { id: "ask", label: "Ask Raptor" },
 ];
 const SORT_LABELS: Record<Sort, string> = { xp: "xP", xgi90: "xGI/90", form: "Form", points: "Points", price: "Price", owned: "Owned" };
 const POS_SHORT = ["All", "GK", "DEF", "MID", "FWD"];
@@ -37,7 +42,7 @@ function href(p: Params, change: Partial<Params>): string {
   const next = { ...p, ...change };
   const q = new URLSearchParams({ view: next.view });
   if (next.view === "fixtures" && next.weeks !== 6) q.set("weeks", String(next.weeks));
-  if (next.view !== "fixtures") {
+  if (next.view === "stats" || next.view === "differentials") {
     if (next.pos) q.set("pos", String(next.pos));
     if (next.view === "stats" && next.sort !== "xp") q.set("sort", next.sort);
     if (next.view === "stats" && next.range !== "season") q.set("range", next.range);
@@ -86,6 +91,76 @@ function Card({ children }: { children: React.ReactNode }) {
   return <section className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">{children}</section>;
 }
 
+function Shell({ params, subtitle, children }: { params: Params; subtitle: string; children: React.ReactNode }) {
+  return (
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-8">
+      <header>
+        <h1 className="text-2xl font-bold tracking-tight">Scout</h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>
+      </header>
+
+      <nav className="flex gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900" aria-label="Scout views">
+        {VIEWS.map((v) => (
+          <Link
+            key={v.id}
+            href={href(params, { view: v.id })}
+            scroll={false}
+            aria-current={v.id === params.view ? "page" : undefined}
+            className={`min-w-0 flex-1 rounded-lg py-1.5 text-center text-[13px] font-medium whitespace-nowrap sm:text-sm ${
+              v.id === params.view ? "bg-white shadow-sm dark:bg-zinc-800" : "text-zinc-600 dark:text-zinc-400"
+            } ${v.id === "ask" && v.id !== params.view ? "text-emerald-700 dark:text-emerald-400" : ""}`}
+          >
+            {v.id === "differentials" ? (
+              <>
+                <span className="sm:hidden">Diffs</span>
+                <span className="hidden sm:inline">{v.label}</span>
+              </>
+            ) : (
+              v.label
+            )}
+          </Link>
+        ))}
+      </nav>
+
+      {children}
+    </main>
+  );
+}
+
+/** Ask Raptor's tab: only what the chat needs to start (the agent loads the rest per question). */
+async function AskView({ params, userId, supabase }: { params: Params; userId: string; supabase: Awaited<ReturnType<typeof createClient>> }) {
+  const [{ data: profile }, { data: gwRows }, { data: plan }] = await Promise.all([
+    supabase.from("profiles").select("fpl_team_id").eq("user_id", userId).maybeSingle<{ fpl_team_id: number | null }>(),
+    supabase.from("gameweeks").select("id,name,deadline_time,is_next,finished").order("id"),
+    supabase
+      .from("transfer_plans")
+      .select("from_gameweek,horizon,free_transfers,bank,plan,expected_points,baseline_points,model_version,created_at")
+      .eq("user_id", userId)
+      .maybeSingle<TransferPlanRow>(),
+  ]);
+  const gameweeks = (gwRows ?? []) as Gameweek[];
+  const next = gameweeks.find((g) => g.is_next) ?? gameweeks.find((g) => !g.finished) ?? null;
+  const squadIds = ((plan?.plan as { squad?: { id: number }[] } | undefined)?.squad ?? []).map((s) => s.id);
+  const { data: flaggedRows } = squadIds.length
+    ? await supabase.from("players").select("web_name,status").in("id", squadIds)
+    : { data: [] };
+  const blocked = !profile?.fpl_team_id ? "Link your FPL team on My gameweek first, so Raptor knows your squad." : !next ? "The season is over." : null;
+  return (
+    <Shell params={params} subtitle="Talk your transfers through">
+      <AskRaptor
+        enabled={Boolean(process.env.GEMINI_API_KEY?.trim())}
+        gameweek={next?.id ?? null}
+        blocked={blocked}
+        suggestions={starterQuestions({
+          plan: plan ?? null,
+          gameweek: next?.id ?? null,
+          flagged: ((flaggedRows ?? []) as { web_name: string; status: string }[]).filter((r) => r.status !== "a").map((r) => r.web_name),
+        })}
+      />
+    </Shell>
+  );
+}
+
 export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
   const supabase = await createClient();
   const userId = await currentUserId(supabase);
@@ -101,6 +176,7 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
     sort: (SORTS as readonly string[]).includes(one(sp.sort) ?? "") ? (one(sp.sort) as Sort) : "xp",
     range: one(sp.range) === "recent" ? "recent" : "season",
   };
+  if (view === "ask") return <AskView params={params} userId={userId} supabase={supabase} />;
 
   const [{ data: profile }, { data: gwRows }, { data: teamRows }, { data: playerRows }, statsRes] = await Promise.all([
     supabase.from("profiles").select("fpl_team_id").eq("user_id", userId).maybeSingle<{ fpl_team_id: number | null }>(),
@@ -137,42 +213,7 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
   const shortName = new Map(teams.map((t) => [t.id, t.short_name]));
 
   // Your squad and your league's squads (latest gameweek stored), for differentials.
-  let mine = new Set<number>();
-  const leagueOwners = new Map<number, number>();
-  let squads = 0;
-  let leagueName: string | null = null;
-  if (myTeamId) {
-    const { data: membership } = await supabase
-      .from("league_members")
-      .select("league_id,leagues(name)")
-      .eq("team_id", myTeamId)
-      .limit(1);
-    const league = ((membership ?? []) as unknown as { league_id: number; leagues: { name: string } | null }[])[0];
-    leagueName = league?.leagues?.name ?? null;
-    const { data: memberRows } = league
-      ? await supabase.from("league_members").select("team_id").eq("league_id", league.league_id)
-      : { data: [] };
-    const teamIds = [...new Set([myTeamId, ...((memberRows ?? []) as { team_id: number }[]).map((m) => m.team_id)])];
-    const { data: latest } = await supabase
-      .from("picks")
-      .select("gameweek_id")
-      .in("team_id", teamIds)
-      .order("gameweek_id", { ascending: false })
-      .limit(1)
-      .maybeSingle<{ gameweek_id: number }>();
-    if (latest) {
-      const { data: pickRows } = await supabase
-        .from("picks")
-        .select("team_id,player_id")
-        .eq("gameweek_id", latest.gameweek_id)
-        .in("team_id", teamIds);
-      const picks = (pickRows ?? []) as { team_id: number; player_id: number }[];
-      mine = new Set(picks.filter((p) => p.team_id === myTeamId).map((p) => p.player_id));
-      const others = picks.filter((p) => p.team_id !== myTeamId);
-      squads = new Set(others.map((p) => p.team_id)).size;
-      for (const p of others) leagueOwners.set(p.player_id, (leagueOwners.get(p.player_id) ?? 0) + 1);
-    }
-  }
+  const { mine, owners: leagueOwners, squads, leagueName } = await leagueOwnership(supabase, myTeamId);
   const myClubs = new Map<number, number>();
   for (const p of players) if (mine.has(p.id)) myClubs.set(p.team_id, (myClubs.get(p.team_id) ?? 0) + 1);
 
@@ -185,30 +226,7 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
   const xpFrom = next ? `GW${next.id}-${next.id + 4}` : "";
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">Scout</h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          {next ? `Looking ahead from ${next.name}` : "The season is over"}
-        </p>
-      </header>
-
-      <nav className="flex gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900" aria-label="Scout views">
-        {VIEWS.map((v) => (
-          <Link
-            key={v.id}
-            href={href(params, { view: v.id })}
-            scroll={false}
-            aria-current={v.id === view ? "page" : undefined}
-            className={`flex-1 rounded-lg py-1.5 text-center text-sm font-medium ${
-              v.id === view ? "bg-white shadow-sm dark:bg-zinc-800" : "text-zinc-600 dark:text-zinc-400"
-            }`}
-          >
-            {v.label}
-          </Link>
-        ))}
-      </nav>
-
+    <Shell params={params} subtitle={next ? `Looking ahead from ${next.name}` : "The season is over"}>
       {view === "fixtures" && (
         <Card>
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -406,6 +424,6 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
           </ul>
         </Card>
       )}
-    </main>
+    </Shell>
   );
 }

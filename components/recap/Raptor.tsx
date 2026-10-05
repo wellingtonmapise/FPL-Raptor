@@ -2,7 +2,7 @@
 // FPL team id, so the same manager always gets the same raptor.
 
 const INK = "#1B1B1E";
-const SKINS = [
+export const SKINS = [
   { skin: "#5BD17A", belly: "#C8F5D2", spots: "#3FAE5E" },
   { skin: "#4CC9F0", belly: "#D2F3FC", spots: "#2BA6CC" },
   { skin: "#FF8FAB", belly: "#FFE0E8", spots: "#E86A8A" },
@@ -33,8 +33,20 @@ export function raptorLook(seed: number) {
   };
 }
 
-export default function Raptor({ seed, className = "h-24 w-24", mood = "smug" }: { seed: number; className?: string; mood?: "smug" | "sad" }) {
-  const look = raptorLook(seed);
+export type RaptorLook = ReturnType<typeof raptorLook>;
+
+export default function Raptor({
+  seed,
+  className = "h-24 w-24",
+  mood = "smug",
+  look: override,
+}: {
+  seed: number;
+  className?: string;
+  mood?: "smug" | "sad";
+  look?: Partial<RaptorLook>; // fix parts of the look, e.g. Ask Raptor's coach
+}) {
+  const look = { ...raptorLook(seed), ...override };
   const { skin, belly, spots } = look.palette;
   const stroke = { stroke: INK, strokeWidth: 3, strokeLinejoin: "round" as const, strokeLinecap: "round" as const };
   return (

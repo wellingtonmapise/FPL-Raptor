@@ -98,7 +98,7 @@ select status_code, content, created from net._http_response order by created de
 3. **Team** (My gameweek) shows your deadline countdown, your team on a pitch (club-colour shirts with each player's expected points on the shirt and next fixture underneath; a list view too), flagged players with FPL's injury news, the model's captain pick and a transfer suggestion, and last gameweek's points, bank and team value. Tap any player, anywhere in the app, for their card: price, availability, form, ownership, the next five fixtures with expected points, the last five results and underlying stats.
 4. **Live** shows your points as matches happen: provisional bonus, projected automatic subs, the vice-captain taking over if needed, who's saving and hurting you against the rest of your league (each player's points times how much more or less of him you have than the average rival), the swing players against your nearest rival, and your league's live table. It refreshes every minute while matches are on.
 5. **Planner** shows the full plan for the next four gameweeks, a tab per week: what to sell and buy, whether a hit is worth it, which chips to play when (or save), and the team on a pitch with new signings ringed. **Build your own** lets you plan the next five gameweeks yourself: tap a player to transfer them (affordable replacements, best outlook first), captain them or swap them with the bench, play chips, and see your expected points against keeping your team and against the bot's plan, with undo. Start from your team or the bot's plan, and save up to five drafts to your account.
-6. **Scout** has a fixture ticker (every club's next 3 or 6 gameweeks by difficulty), underlying stats (xP, xGI/90, xG, xA, defensive contributions, for the season or the last six gameweeks) and differentials (good picks almost nobody in your league has).
+6. **Scout** has a fixture ticker (every club's next 3 or 6 gameweeks by difficulty), underlying stats (xP, xGI/90, xG, xA, defensive contributions, for the season or the last six gameweeks), differentials (good picks almost nobody in your league has) and **Ask Raptor**: a chat about your squad with the cartoon raptor. He knows your team, bank, free transfers, chips and the bot's plan, looks players and fixtures up and runs each idea through the planner before answering, and pushes back when the reasoning is thin. Any plan he ran opens in Build your own with one tap.
 7. **League** shows each followed mini-league you're in: the last gameweek's recap as swipeable comic cards (Top Dog, Bench Warmer, Armband Disaster, Freefall, Wooden Spoon and more, each with the manager's cartoon raptor and a one-line roast, plus 😂 💀 🔥 🤡 reactions from the league and a Share button that turns a card into a picture for the group chat), the table with movement, your closest rival (what they start that you don't, and their captain), the week's awards, everyone's captains, and who owns whom (the template, your differentials, and threats you don't own).
 8. For notifications, open **Notifications** (linked from My gameweek). On iPhone, first add the site to the Home Screen (Share → Add to Home Screen) and open it from the icon; Apple only allows notifications from Home Screen apps. Tap **Turn on notifications**, then **Send a test notification**.
 
@@ -238,6 +238,24 @@ shows it and the alerts job pushes it.
   models.
 - To turn recaps off, delete the secret (or the "Write gameweek recaps" step in
   `.github/workflows/fetch.yml`).
+
+## Ask Raptor
+
+The chat on Scout (`app/api/ask/route.ts`) sends your question, with the recent turns of the
+conversation, to Gemini along with a brief on your squad (each player's selling price and expected
+points, bank, free transfers, chips left, the bot's plan). Gemini can call four tools that run on our
+server over our own data: `search_players`, `player_details`, `fixture_run` and `what_if` (the Build
+your own engine, so hits, free transfers, bank and club limits all count). It's told to quote only
+numbers from those, and the app streams what it's doing ("Checking Saka, Palmer...") while it works.
+
+- **Setup:** add the same free `GEMINI_API_KEY` to Vercel (**Settings → Environment Variables**, all
+  environments) and redeploy. It's only read on the server; browsers never see it. Without it the
+  tab says Ask Raptor isn't switched on.
+- **Limits:** signed-in users only, 40 questions an hour each, 20 turns of history, 2,000 characters a
+  question. Gemini's free tier has its own rate limits; when it's busy the app tries the next Flash
+  model, then asks you to try again in a minute.
+- The conversation stays in your browser (it starts fresh each gameweek). Gemini sees your squad and
+  questions; on the free tier Google may use prompts to improve its models.
 
 ## Live scores
 

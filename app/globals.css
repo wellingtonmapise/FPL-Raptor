@@ -42,3 +42,31 @@ body {
     opacity: 1;
   }
 }
+
+/* Ask Raptor: a gentle bob while he thinks, and typing dots. */
+@keyframes raptor-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-3deg);
+  }
+}
+
+@keyframes dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-bob {
+    animation: none !important;
+  }
+}

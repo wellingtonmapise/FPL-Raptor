@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { deleteDraft, saveDraft, type SavedDraft } from "@/app/planner/actions";
 import Pitch from "@/components/Pitch";
 import { usePlayerSheet } from "@/components/PlayerSheet";
+import { HANDOFF } from "@/lib/ask/handoff";
 import Sheet from "@/components/Sheet";
 import Shirt from "@/components/Shirt";
 import {
@@ -77,7 +78,8 @@ function SheetAction({ onClick, children, note }: { onClick: () => void; childre
 export default function DraftPlanner({ base, players, fixtures, botMoves, drafts: savedDrafts }: Props) {
   const lookup = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const { open: openCard } = usePlayerSheet();
-  const storageKey = `raptor-draft-gw${base.gameweeks[0]}`;
+  const firstGameweek = base.gameweeks[0];
+  const storageKey = `raptor-draft-gw${firstGameweek}`;
 
   const [moves, setMoves] = useState<Move[]>([]);
   const [draft, setDraft] = useState<{ id: string | null; name: string } | null>(null);
@@ -91,19 +93,28 @@ export default function DraftPlanner({ base, players, fixtures, botMoves, drafts
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
-  // Unsaved work survives a refresh on this device.
+  // Unsaved work survives a refresh on this device. A plan sent from Ask
+  // Raptor ("Try in planner") replaces it once.
   useEffect(() => {
     try {
+      const handoff = JSON.parse(window.localStorage.getItem(HANDOFF) ?? "null");
+      window.localStorage.removeItem(HANDOFF);
+      if (handoff && handoff.gameweek === firstGameweek) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring once after hydration
+        setMoves(cleanMoves(handoff.moves));
+        setDraft(null);
+        setNotice(`Loaded from Ask Raptor: ${String(handoff.label ?? "").slice(0, 80)}`);
+        return;
+      }
       const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "null");
       if (saved) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring once after hydration
         setMoves(cleanMoves(saved.moves));
         setDraft(saved.draft ?? null);
       }
     } catch {
       // Nothing saved, or storage is blocked.
     }
-  }, [storageKey]);
+  }, [storageKey, firstGameweek]);
   useEffect(() => {
     try {
       window.localStorage.setItem(storageKey, JSON.stringify({ moves, draft }));
