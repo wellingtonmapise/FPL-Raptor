@@ -8,6 +8,7 @@ import Raptor, { SKINS, type RaptorLook } from "@/components/recap/Raptor";
 import type { AskEvent } from "@/lib/ask/agent";
 import { formatReply, type Inline } from "@/lib/ask/format";
 import { HANDOFF } from "@/lib/ask/handoff";
+import { askEvents, readAskHistory, type AskMessage as Message } from "@/lib/askView";
 import { TOOL_LABELS, type Scenario } from "@/lib/ask/tools";
 
 // Ask Raptor: a chat about your squad with the cartoon raptor, who looks
@@ -16,19 +17,9 @@ import { TOOL_LABELS, type Scenario } from "@/lib/ask/tools";
 // turns to /api/ask, which streams back progress lines and then the answer.
 
 const COACH: Partial<RaptorLook> = { palette: SKINS[0], gear: "cap", hat: "#1D3557", spots: true, sleepy: false };
-const STORE = "raptor-ask";
-const MAX_KEPT = 40;
-
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-  tools?: string[];
-  scenarios?: Scenario[];
-  mentions?: { id: number; name: string }[];
-  error?: boolean;
-};
-
 type Props = {
+  storageKey: string;
+  needsTeam: boolean;
   enabled: boolean;
   gameweek: number | null; // the next gameweek: a new one starts a fresh chat
   suggestions: string[];
@@ -63,7 +54,7 @@ function Parts({ parts }: { parts: Inline[] }) {
             key={i}
             type="button"
             onClick={() => open(p.id)}
-            className="cursor-pointer font-medium text-emerald-700 underline decoration-emerald-700/30 underline-offset-2 hover:decoration-emerald-700 dark:text-emerald-400"
+            className="text-link cursor-pointer"
           >
             {p.text}
           </button>
@@ -96,263 +87,166 @@ function Reply({ text, mentions }: { text: string; mentions: { id: number; name:
 }
 
 function ScenarioChips({ scenarios, onOpen }: { scenarios: Scenario[]; onOpen: (s: Scenario) => void }) {
-  return (
-    <div className="px-1">
-      <p className="mb-1 text-[11px] text-zinc-500">
-        Open in the planner (xP vs doing nothing, GW{scenarios[0].gameweeks[0]}–{scenarios[0].gameweeks.at(-1)}):
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {scenarios.map((s) => (
-          <button
-            key={s.label}
-            type="button"
-            onClick={() => onOpen(s)}
-            className="flex max-w-full items-center gap-1.5 rounded-full border border-zinc-200 bg-white py-1 pr-1 pl-3 text-left text-[13px] hover:border-emerald-600 dark:border-zinc-800 dark:bg-zinc-950"
-          >
-            <span className="truncate">{s.label}</span>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
-                s.gain >= 0 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200" : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
-              }`}
-            >
-              {s.gain >= 0 ? "+" : "−"}
-              {Math.abs(s.gain).toFixed(1)}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  return <div className="space-y-2">{scenarios.map((s,i) => <div key={i} className="rounded-xl border border-line bg-surface p-3">
+    <p className="text-sm font-semibold">{s.label}</p>
+    <p className="mt-1 text-xs leading-relaxed text-muted">{s.gain >= 0 ? "+" : "−"}{Math.abs(s.gain).toFixed(1)} xP vs no moves · GW{s.gameweeks[0]}–{s.gameweeks.at(-1)} · after hits</p>
+    <button type="button" className="text-link mt-1 min-h-11 text-sm" onClick={() => onOpen(s)}>Review in Planner <span aria-hidden>→</span></button>
+  </div>)}</div>;
 }
 
-export default function AskRaptor({ enabled, gameweek, suggestions, blocked }: Props) {
+export default function AskRaptor({ storageKey, needsTeam, enabled, gameweek, suggestions, blocked }: Props) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [ready, setReady] = useState(false);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [storageError, setStorageError] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [showLatest, setShowLatest] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const followRef = useRef(true);
+  const alive = useRef(true);
 
-  // The chat survives a refresh on this device, until the gameweek moves on.
   useEffect(() => {
+    alive.current = true;
     try {
-      const saved = JSON.parse(window.localStorage.getItem(STORE) ?? "null");
-      if (saved?.gameweek === gameweek && Array.isArray(saved.messages)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring once after hydration
-        setMessages(saved.messages);
-      }
-    } catch {
-      // Nothing saved, or storage is blocked.
-    }
-  }, [gameweek]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restore once per account/team/week, before persisting
+      setMessages(readAskHistory(window.localStorage.getItem(storageKey)));
+    } catch { setStorageError(true); }
+    setReady(true);
+    return () => { alive.current = false; requestRef.current?.abort(); };
+  }, [storageKey]);
   useEffect(() => {
-    try {
-      if (messages.length) window.localStorage.setItem(STORE, JSON.stringify({ gameweek, messages: messages.slice(-MAX_KEPT) }));
-      else window.localStorage.removeItem(STORE);
-    } catch {
-      // Not kept on this device, which is fine.
+    if (!ready) return;
+    try { window.localStorage.setItem(storageKey, JSON.stringify(messages.slice(-40))); }
+    catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- storage failure must be visible
+      setStorageError(true);
     }
-  }, [messages, gameweek]);
+  }, [messages, ready, storageKey]);
   useEffect(() => {
-    if (messages.length || pending) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, pending, status]);
+    const area = scrollRef.current;
+    if (area && followRef.current) area.scrollTop = area.scrollHeight;
+  }, [messages, pending, status, ready]);
+  useEffect(() => {
+    // Safari's keyboard shrinks the visual viewport without resizing dvh.
+    const viewport = window.visualViewport;
+    const fitKeyboard = () => {
+      const panel = panelRef.current;
+      const field = panel?.querySelector("textarea");
+      if (!panel || !viewport) return;
+      if (document.activeElement === field && viewport.height < window.innerHeight - 100) {
+        panel.style.setProperty("--ask-keyboard-height", `${Math.max(180, viewport.height - 80)}px`);
+        requestAnimationFrame(() => field?.scrollIntoView({ block: "nearest" }));
+      } else panel.style.removeProperty("--ask-keyboard-height");
+    };
+    viewport?.addEventListener("resize", fitKeyboard);
+    document.addEventListener("focusin", fitKeyboard);
+    document.addEventListener("focusout", fitKeyboard);
+    return () => {
+      viewport?.removeEventListener("resize", fitKeyboard);
+      document.removeEventListener("focusin", fitKeyboard);
+      document.removeEventListener("focusout", fitKeyboard);
+    };
+  }, []);
 
-  async function ask(question: string) {
+  function latest() {
+    followRef.current = true;
+    setShowLatest(false);
+    const area = scrollRef.current;
+    if (area) area.scrollTop = area.scrollHeight;
+  }
+
+  async function ask(question: string, retry = false) {
     const text = question.trim();
-    if (!text || pending || !enabled || blocked) return;
-    const history = [...messages.filter((m) => !m.error), { role: "user" as const, content: text }];
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    if (!text || requestRef.current || !ready || !enabled || blocked) return;
+    const history = retry ? messages.filter(m => !m.error) : [...messages.filter(m => !m.error), { role: "user" as const, content: text }];
+    setMessages(retry ? history : [...messages, { role: "user", content: text }]);
     setInput("");
     setPending(true);
     setStatus(null);
-    const fail = (error: string) => setMessages((m) => [...m, { role: "assistant", content: error, error: true }]);
+    latest();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const fail = (error: string) => { if (alive.current) setMessages(m => [...m, { role: "assistant", content: error, error: true }]); };
     try {
       const res = await fetch("/api/ask", {
-        method: "POST",
+        method: "POST", signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history.slice(-20).map(({ role, content }) => ({ role, content })) }),
       });
       if (!res.ok || !res.body) {
         const event = (await res.json().catch(() => null)) as AskEvent | null;
-        fail(event?.type === "error" ? event.error : "Raptor couldn't be reached. Check your connection and try again.");
+        fail(event?.type === "error" ? event.error : "Raptor couldn’t be reached. Check your connection and try again.");
         return;
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
       let finished = false;
-      for (;;) {
-        const { value, done } = await reader.read();
-        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as AskEvent;
-          if (event.type === "status") setStatus(event.text);
-          else if (event.type === "error") {
-            finished = true;
-            fail(event.error);
-          } else {
-            finished = true;
-            setMessages((m) => [
-              ...m,
-              { role: "assistant", content: event.reply, tools: event.tools, scenarios: event.scenarios, mentions: event.mentions },
-            ]);
-          }
+      for await (const event of askEvents(res.body)) {
+        if (!alive.current || controller.signal.aborted) break;
+        if (event.type === "status") setStatus(event.text);
+        else {
+          finished = true;
+          if (event.type === "error") fail(event.error);
+          else setMessages(m => [...m, { role: "assistant", content: event.reply, tools: event.tools, scenarios: event.scenarios, mentions: event.mentions }]);
+          break;
         }
-        if (done) break;
       }
-      if (!finished) fail("Raptor went quiet halfway through. Try asking again.");
+      if (!finished && !controller.signal.aborted) fail("The reply was interrupted. Your question is still here; try again.");
     } catch {
-      fail("Raptor couldn't be reached. Check your connection and try again.");
+      if (!controller.signal.aborted) fail("Raptor couldn’t be reached. Check your connection and try again.");
     } finally {
-      setPending(false);
-      setStatus(null);
+      requestRef.current = null;
+      if (alive.current) { setPending(false); setStatus(null); }
     }
   }
 
   function openInPlanner(s: Scenario) {
-    try {
-      window.localStorage.setItem(HANDOFF, JSON.stringify({ gameweek: s.gameweeks[0], moves: s.moves, label: s.label }));
-    } catch {
-      // Storage blocked: the planner opens without it.
-    }
+    try { window.localStorage.setItem(HANDOFF, JSON.stringify({ gameweek: s.gameweeks[0], moves: s.moves, label: s.label })); }
+    catch { setHandoffError("This browser couldn’t pass the scenario to Planner. Allow site storage, then try again."); return; }
     router.push("/planner?mode=build");
   }
 
   const empty = messages.length === 0;
-  const off = !enabled || blocked;
-
-  return (
-    <section className="flex flex-col gap-3">
-      {empty ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl bg-gradient-to-b from-emerald-50 to-transparent px-4 pt-6 pb-2 text-center dark:from-emerald-950/40">
-          <Coach className="h-24 w-24" />
-          <div>
-            <h2 className="text-lg font-bold tracking-tight">Ask Raptor</h2>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
-              {off
-                ? (blocked ?? "Ask Raptor isn't switched on yet.")
-                : "Talk your moves through. Raptor knows your squad, bank, chips and the bot's plan, runs the numbers before he answers, and tells you when your reasoning's daft."}
-            </p>
-            {!enabled && !blocked && (
-              <p className="mx-auto mt-2 max-w-sm text-xs text-zinc-500">
-                For the site&apos;s owner: add <code className="font-mono">GEMINI_API_KEY</code> to the Vercel project&apos;s environment variables and redeploy.
-              </p>
-            )}
-            {blocked && (
-              <Link href="/me" className="mt-2 inline-block text-sm font-medium text-emerald-700 underline underline-offset-2 dark:text-emerald-400">
-                Go to My gameweek
-              </Link>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setMessages([])}
-            disabled={pending}
-            className="text-xs text-zinc-500 underline-offset-2 hover:underline disabled:opacity-50"
-          >
-            New chat
-          </button>
-        </div>
-      )}
-
-      <ol className="flex flex-col gap-3" aria-live="polite">
-        {messages.map((m, i) =>
-          m.role === "user" ? (
-            <li key={i} className="ml-10 self-end rounded-2xl rounded-br-md bg-emerald-700 px-3.5 py-2 text-[15px] whitespace-pre-wrap text-white">
-              {m.content}
-            </li>
-          ) : (
-            <li key={i} className="mr-4 flex items-start gap-2">
-              <Coach className="mt-1 h-9 w-9" />
-              <div className="min-w-0 flex-1 space-y-2">
-                <div
-                  className={`rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[15px] leading-relaxed ${
-                    m.error ? "bg-rose-50 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200" : "bg-zinc-100 dark:bg-zinc-900"
-                  }`}
-                >
-                  {m.error ? m.content : <Reply text={m.content} mentions={m.mentions ?? []} />}
-                </div>
-                {m.scenarios && m.scenarios.length > 0 && <ScenarioChips scenarios={m.scenarios} onOpen={openInPlanner} />}
-                {m.tools && m.tools.length > 0 && (
-                  <p className="px-1 text-[11px] text-zinc-500">{m.tools.map((t) => TOOL_LABELS[t] ?? t).join(" · ")}</p>
-                )}
-              </div>
-            </li>
-          ),
-        )}
-        {pending && (
-          <li className="mr-4 flex items-start gap-2">
-            <Coach className="mt-1 h-9 w-9" thinking />
-            <div className="rounded-2xl rounded-bl-md bg-zinc-100 px-3.5 py-2.5 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
-              {status ?? "Thinking"}
-              <span aria-hidden className="ml-0.5 inline-flex gap-0.5">
-                {[0, 1, 2].map((d) => (
-                  <span key={d} style={{ animation: `dot-pulse 1.2s ${d * 0.2}s infinite` }}>
-                    .
-                  </span>
-                ))}
-              </span>
-            </div>
-          </li>
-        )}
-      </ol>
-      <div ref={endRef} className="scroll-mb-44 sm:scroll-mb-28" />
-
-      {empty && !off && (
-        <div className="flex flex-wrap justify-center gap-2">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => ask(s)}
-              className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-left text-sm text-zinc-700 hover:border-emerald-600 hover:text-emerald-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:text-emerald-300"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {!off && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            ask(input);
-          }}
-          className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex items-end gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:bottom-4 dark:border-zinc-800 dark:bg-zinc-950"
-        >
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value.slice(0, 2000))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                ask(input);
-              }
-            }}
-            rows={1}
-            placeholder={empty ? "e.g. Should I sell Saka for Palmer?" : "Reply to Raptor"}
-            aria-label="Your question"
-            className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-[16px] outline-none [field-sizing:content] placeholder:text-zinc-400"
-          />
-          <button
-            type="submit"
-            disabled={pending || !input.trim()}
-            className="h-10 shrink-0 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
-          >
-            Ask
-          </button>
-        </form>
-      )}
-      {!off && <p className="text-center text-[11px] text-zinc-500">Raptor can be wrong. The numbers come from the app&apos;s model, which runs a little optimistic.</p>}
-    </section>
-  );
+  const off = !enabled || Boolean(blocked);
+  const lastQuestion = messages.findLast(m => m.role === "user")?.content;
+  return <section ref={panelRef} className="ask-panel surface mx-auto flex w-full max-w-3xl flex-col overflow-hidden" aria-label="Ask Raptor conversation">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">
+      <div className="flex items-center gap-2"><Coach className="h-9 w-9" /><div><h2 className="text-sm font-semibold">Ask Raptor</h2><p className="text-xs text-muted">Your squad · {gameweek ? `GW${gameweek}` : "No upcoming gameweek"}</p></div></div>
+      {!empty && <button type="button" onClick={() => { setMessages([]); setHandoffError(null); }} disabled={pending || !ready} className="button-secondary text-xs">New chat</button>}
+    </div>
+    {storageError && <p role="status" className="shrink-0 bg-warning-soft px-4 py-2 text-xs text-warning">Chat history can’t be saved in this browser. Keep this page open to retain this conversation.</p>}
+    <div ref={scrollRef} tabIndex={0} aria-label="Conversation history" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4" onScroll={() => {
+      const area = scrollRef.current;
+      if (!area) return;
+      followRef.current = area.scrollHeight - area.scrollTop - area.clientHeight < 70;
+      setShowLatest(!followRef.current);
+    }}>
+      {empty && <div className="py-3"><h3 className="section-title">Talk through your next move</h3><p className="mt-2 max-w-lg text-sm leading-relaxed text-muted">{off ? blocked ?? "Ask Raptor is temporarily unavailable. Try again later." : "Compare transfers, check fixtures or test a captain. Raptor checks your squad and runs the numbers before replying."}</p>
+        {needsTeam && <Link href="/account" className="text-link mt-2 inline-flex min-h-11 items-center text-sm">Link your FPL team</Link>}
+        {!off && <div className="mt-4 grid gap-2 sm:grid-cols-2">{suggestions.map(s => <button key={s} type="button" disabled={!ready} onClick={() => ask(s)} className="min-h-11 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-surface-muted">{s}</button>)}</div>}
+      </div>}
+      <ol className="flex flex-col gap-5" aria-label="Messages">{messages.map((m,i) => <li key={i} className={m.role === "user" ? "ml-8 self-end max-w-full rounded-xl bg-accent-soft px-4 py-3 text-sm whitespace-pre-wrap text-foreground" : "min-w-0 space-y-3 text-sm leading-relaxed break-words"}>
+        <p className="sr-only">{m.role === "user" ? "You" : "Raptor"}</p>
+        {m.role === "user" ? m.content : m.error ? <div role="alert" className="rounded-xl bg-warning-soft p-3 text-warning"><p>{m.content}</p>{i === messages.length - 1 && lastQuestion && <button type="button" disabled={pending || off} className="button-secondary mt-2" onClick={() => ask(lastQuestion,true)}>Try again</button>}</div> : <Reply text={m.content} mentions={m.mentions ?? []} />}
+        {m.scenarios?.length ? <ScenarioChips scenarios={m.scenarios} onOpen={openInPlanner} /> : null}
+        {m.tools?.length ? <p className="text-xs text-muted">Checked: {m.tools.map(t => TOOL_LABELS[t] ?? t).join(" · ")}</p> : null}
+      </li>)}</ol>
+      <div role="status" aria-live="polite" className={pending ? "mt-5 flex items-center gap-2 text-sm text-muted" : "sr-only"}>{pending ? <><Coach className="h-8 w-8" thinking />{status ?? "Checking your squad…"}</> : !empty ? "Reply complete" : "Ready for your question"}</div>
+    </div>
+    {showLatest && <button type="button" className="min-h-11 shrink-0 border-t border-line bg-accent-soft text-sm text-accent" onClick={latest}>Latest message ↓</button>}
+    {handoffError && <p role="alert" className="shrink-0 bg-warning-soft px-4 py-2 text-sm text-warning">{handoffError}</p>}
+    {!off && <div className="shrink-0 border-t border-line bg-surface p-3">
+      <form onSubmit={e => { e.preventDefault(); ask(input); }} className="flex items-end gap-2">
+        <textarea value={input} onChange={e => setInput(e.target.value.slice(0,2000))} onKeyDown={e => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(input); }
+        }} rows={1} maxLength={2000} placeholder="Ask about your team…" aria-label="Your question" disabled={!ready}
+          className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-line bg-background px-3 py-2 text-base [field-sizing:content]" />
+        <button type="submit" disabled={!ready || pending || !input.trim()} className="button-primary">Ask</button>
+      </form>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted">Predictions are estimates. Check the details before making a transfer.</p>
+    </div>}
+  </section>;
 }

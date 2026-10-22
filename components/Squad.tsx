@@ -12,7 +12,7 @@ const DIFFICULTY_CLASSES: Record<number, string> = {
 
 export function FixtureChips({ fixtures }: { fixtures: NextFixture[] }) {
   if (fixtures.length === 0) {
-    return <span className="text-xs text-zinc-500">No fixture</span>;
+    return <span className="text-xs text-muted">No fixture</span>;
   }
   return (
     <span className="flex flex-wrap gap-1">
@@ -55,11 +55,11 @@ export function StatusBadge({ sp }: { sp: SquadPlayer }) {
   );
 }
 
-function PlayerRow({ sp, dim, xp }: { sp: SquadPlayer; dim?: boolean; xp?: number }) {
+function PlayerRow({ sp, dim, xp, fixturesAvailable }: { sp: SquadPlayer; dim?: boolean; xp?: number; fixturesAvailable: boolean }) {
   const p = sp.player;
   return (
     <li className={`flex items-center gap-3 py-2.5 ${dim ? "opacity-70" : ""}`}>
-      <span className="w-9 shrink-0 text-xs font-medium text-zinc-500">{p ? POSITIONS[p.position] : ""}</span>
+      <span className="w-9 shrink-0 text-xs font-medium text-muted">{p ? POSITIONS[p.position] : ""}</span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <PlayerLink id={sp.player_id} className="truncate font-medium">
@@ -77,18 +77,18 @@ function PlayerRow({ sp, dim, xp }: { sp: SquadPlayer; dim?: boolean; xp?: numbe
           )}
           <StatusBadge sp={sp} />
         </div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted">
           <span className="w-8">{sp.club}</span>
-          <FixtureChips fixtures={sp.fixtures} />
+          {fixturesAvailable && p ? <FixtureChips fixtures={sp.fixtures} /> : <span>Fixtures unavailable</span>}
         </div>
       </div>
       <span className="shrink-0 text-right tabular-nums">
         {xp !== undefined && (
           <span className="block text-sm font-semibold" title="Expected points next gameweek">
-            {xp.toFixed(1)} <span className="text-xs font-normal text-zinc-500">xP</span>
+            {xp.toFixed(1)} <span className="text-xs font-normal text-muted">xP</span>
           </span>
         )}
-        <span className={`block text-zinc-600 dark:text-zinc-400 ${xp !== undefined ? "text-xs" : "text-sm"}`}>
+        <span className={`block text-muted ${xp !== undefined ? "text-xs" : "text-sm"}`}>
           {formatPrice(p?.now_cost)}
         </span>
       </span>
@@ -96,11 +96,11 @@ function PlayerRow({ sp, dim, xp }: { sp: SquadPlayer; dim?: boolean; xp?: numbe
   );
 }
 
-export function SquadList({ players, dim, xp }: { players: SquadPlayer[]; dim?: boolean; xp?: Map<number, number> }) {
+export function SquadList({ players, dim, xp, fixturesAvailable = true }: { players: SquadPlayer[]; dim?: boolean; xp?: Map<number, number>; fixturesAvailable?: boolean }) {
   return (
     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
       {players.map((sp) => (
-        <PlayerRow key={sp.player_id} sp={sp} dim={dim} xp={xp?.get(sp.player_id)} />
+        <PlayerRow key={sp.player_id} sp={sp} dim={dim} xp={xp?.get(sp.player_id)} fixturesAvailable={fixturesAvailable} />
       ))}
     </ul>
   );

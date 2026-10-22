@@ -19,7 +19,7 @@ export type PlanWeek = {
   captain: PlanPlayer;
   lineup: PlanPlayer[];
   bench: PlanPlayer[];
-  expected_points: number;
+  expected_points: number; // this week's lineup and captain, before transfer hits
   bank_after: number;
   chip?: string | null; // wildcard, freehit, bboost, 3xc
 };
@@ -42,7 +42,7 @@ export type TransferPlanRow = {
   free_transfers: number;
   bank: number;
   plan: { weeks: PlanWeek[]; chips?: ChipOption[]; no_chip_points?: number | null };
-  expected_points: number;
+  expected_points: number; // full horizon, after transfer hits
   baseline_points: number;
   model_version: string;
   created_at: string;

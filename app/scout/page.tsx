@@ -3,6 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AskRaptor from "@/components/AskRaptor";
 import PlayerLink from "@/components/PlayerLink";
+import ScoutNav from "@/components/ScoutNav";
+import ScoutPlayers from "@/components/ScoutPlayers";
+import { scoutHref as href, scoutParams, type ScoutParams as Params } from "@/lib/scoutView";
+import { askStorageKey } from "@/lib/askView";
 import { starterQuestions } from "@/lib/ask/prompt";
 import { formatPrice, POSITIONS } from "@/lib/fpl";
 import type { Fixture, Team } from "@/lib/gameweek";
@@ -10,13 +14,9 @@ import {
   differentials,
   fixtureTicker,
   minutesFloor,
-  SORTS,
-  sortStats,
   statRow,
   type PlayerStats,
-  type Range,
   type ScoutPlayer,
-  type Sort,
   type TickerCell,
 } from "@/lib/scout";
 import { leagueOwnership } from "@/lib/leagueOwnership";
@@ -25,41 +25,16 @@ import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Scout · FPL Raptor" };
 
-type View = "fixtures" | "stats" | "differentials" | "ask";
-type Params = { view: View; weeks: number; pos: number; sort: Sort; range: Range };
 type Gameweek = { id: number; name: string; deadline_time: string; is_next: boolean; finished: boolean };
-
-const VIEWS: { id: View; label: string }[] = [
-  { id: "fixtures", label: "Fixtures" },
-  { id: "stats", label: "Stats" },
-  { id: "differentials", label: "Differentials" },
-  { id: "ask", label: "Ask Raptor" },
-];
-const SORT_LABELS: Record<Sort, string> = { xp: "xP", xgi90: "xGI/90", form: "Form", points: "Points", price: "Price", owned: "Owned" };
 const POS_SHORT = ["All", "GK", "DEF", "MID", "FWD"];
-
-function href(p: Params, change: Partial<Params>): string {
-  const next = { ...p, ...change };
-  const q = new URLSearchParams({ view: next.view });
-  if (next.view === "fixtures" && next.weeks !== 6) q.set("weeks", String(next.weeks));
-  if (next.view === "stats" || next.view === "differentials") {
-    if (next.pos) q.set("pos", String(next.pos));
-    if (next.view === "stats" && next.sort !== "xp") q.set("sort", next.sort);
-    if (next.view === "stats" && next.range !== "season") q.set("range", next.range);
-  }
-  return `/scout?${q}`;
-}
 
 function Chip({ to, on, children }: { to: string; on: boolean; children: React.ReactNode }) {
   return (
     <Link
       href={to}
       scroll={false}
-      className={`rounded-full px-3 py-1 text-sm whitespace-nowrap ${
-        on
-          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-          : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-      }`}
+      aria-current={on ? "true" : undefined}
+      className={`inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-medium whitespace-nowrap ${on ? "bg-accent-soft text-accent" : "bg-surface-muted text-muted"}`}
     >
       {children}
     </Link>
@@ -71,65 +46,32 @@ const FDR_CLASS: Record<number, string> = {
   1: "bg-emerald-700 text-white",
   2: "bg-emerald-300 text-emerald-950",
   3: "bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100",
-  4: "bg-rose-400 text-white",
+  4: "bg-rose-300 text-rose-950",
   5: "bg-rose-800 text-white",
 };
 
-function FixtureChip({ cell, compact = false }: { cell: TickerCell; compact?: boolean }) {
-  return (
-    <span
-      className={`block rounded px-1 text-center font-medium leading-5 ${compact ? "text-[10px]" : "text-[11px]"} ${
-        FDR_CLASS[cell.difficulty ?? 3] ?? FDR_CLASS[3]
-      }`}
-    >
-      {cell.home ? cell.opponent : cell.opponent.toLowerCase()}
-    </span>
-  );
+function FixtureChip({ cell }: { cell: TickerCell; compact?: boolean }) {
+  return <span className={`block rounded px-1.5 py-1 text-center text-xs leading-5 ${FDR_CLASS[cell.difficulty ?? 3] ?? FDR_CLASS[3]}`}>
+    <span className="block font-semibold">{cell.opponent} ({cell.home ? "H" : "A"})</span>
+    <span className="block text-[10px]">Difficulty {cell.difficulty ?? "?"}</span>
+  </span>;
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">{children}</section>;
+  return <section className="surface min-w-0 p-4 sm:p-5">{children}</section>;
 }
 
-function Shell({ params, subtitle, children }: { params: Params; subtitle: string; children: React.ReactNode }) {
-  return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">Scout</h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>
-      </header>
-
-      <nav className="flex gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900" aria-label="Scout views">
-        {VIEWS.map((v) => (
-          <Link
-            key={v.id}
-            href={href(params, { view: v.id })}
-            scroll={false}
-            aria-current={v.id === params.view ? "page" : undefined}
-            className={`min-w-0 flex-1 rounded-lg py-1.5 text-center text-[13px] font-medium whitespace-nowrap sm:text-sm ${
-              v.id === params.view ? "bg-white shadow-sm dark:bg-zinc-800" : "text-zinc-600 dark:text-zinc-400"
-            } ${v.id === "ask" && v.id !== params.view ? "text-emerald-700 dark:text-emerald-400" : ""}`}
-          >
-            {v.id === "differentials" ? (
-              <>
-                <span className="sm:hidden">Diffs</span>
-                <span className="hidden sm:inline">{v.label}</span>
-              </>
-            ) : (
-              v.label
-            )}
-          </Link>
-        ))}
-      </nav>
-
-      {children}
-    </main>
-  );
+function Shell({ subtitle, children }: { params: Params; subtitle: string; children: React.ReactNode }) {
+  return <main className="mx-auto flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8">
+    <header><h1 className="page-title">Scout</h1><p className="mt-1 text-sm text-muted">{subtitle}</p></header>
+    <ScoutNav />
+    {children}
+  </main>;
 }
 
 /** Ask Raptor's tab: only what the chat needs to start (the agent loads the rest per question). */
 async function AskView({ params, userId, supabase }: { params: Params; userId: string; supabase: Awaited<ReturnType<typeof createClient>> }) {
-  const [{ data: profile }, { data: gwRows }, { data: plan }] = await Promise.all([
+  const [profileRes, gameweekRes, { data: plan }] = await Promise.all([
     supabase.from("profiles").select("fpl_team_id").eq("user_id", userId).maybeSingle<{ fpl_team_id: number | null }>(),
     supabase.from("gameweeks").select("id,name,deadline_time,is_next,finished").order("id"),
     supabase
@@ -138,16 +80,21 @@ async function AskView({ params, userId, supabase }: { params: Params; userId: s
       .eq("user_id", userId)
       .maybeSingle<TransferPlanRow>(),
   ]);
-  const gameweeks = (gwRows ?? []) as Gameweek[];
+  const { data: profile } = profileRes;
+  const gameweeks = (gameweekRes.data ?? []) as Gameweek[];
   const next = gameweeks.find((g) => g.is_next) ?? gameweeks.find((g) => !g.finished) ?? null;
   const squadIds = ((plan?.plan as { squad?: { id: number }[] } | undefined)?.squad ?? []).map((s) => s.id);
   const { data: flaggedRows } = squadIds.length
     ? await supabase.from("players").select("web_name,status").in("id", squadIds)
     : { data: [] };
-  const blocked = !profile?.fpl_team_id ? "Link your FPL team on My gameweek first, so Raptor knows your squad." : !next ? "The season is over." : null;
+  const blocked = profileRes.error || gameweekRes.error ? "Your team context could not load. Try refreshing this page." : !profile?.fpl_team_id ? "Link your FPL team in Account so Raptor can use your squad." : !next ? "The season is over." : null;
+  const storageKey = askStorageKey(userId, profile?.fpl_team_id ?? null, next?.id ?? null);
   return (
     <Shell params={params} subtitle="Talk your transfers through">
       <AskRaptor
+        key={storageKey}
+        storageKey={storageKey}
+        needsTeam={!profileRes.error && !profile?.fpl_team_id}
         enabled={Boolean(process.env.GEMINI_API_KEY?.trim())}
         gameweek={next?.id ?? null}
         blocked={blocked}
@@ -167,18 +114,11 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
   if (!userId) redirect("/login?next=/scout");
 
   const sp = await searchParams;
-  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-  const view = (VIEWS.some((v) => v.id === one(sp.view)) ? one(sp.view) : "fixtures") as View;
-  const params: Params = {
-    view,
-    weeks: one(sp.weeks) === "3" ? 3 : 6,
-    pos: Math.min(4, Math.max(0, Number(one(sp.pos)) || 0)),
-    sort: (SORTS as readonly string[]).includes(one(sp.sort) ?? "") ? (one(sp.sort) as Sort) : "xp",
-    range: one(sp.range) === "recent" ? "recent" : "season",
-  };
+  const params = scoutParams({ get: name => { const value = sp[name]; return (Array.isArray(value) ? value[0] : value) ?? null; } });
+  const { view } = params;
   if (view === "ask") return <AskView params={params} userId={userId} supabase={supabase} />;
 
-  const [{ data: profile }, { data: gwRows }, { data: teamRows }, { data: playerRows }, statsRes] = await Promise.all([
+  const [{ data: profile }, gameweekRes, teamRes, playerRes, statsRes] = await Promise.all([
     supabase.from("profiles").select("fpl_team_id").eq("user_id", userId).maybeSingle<{ fpl_team_id: number | null }>(),
     supabase.from("gameweeks").select("id,name,deadline_time,is_next,finished").order("id"),
     supabase.from("teams").select("id,name,short_name").order("short_name"),
@@ -192,22 +132,23 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
       ),
   ]);
   const myTeamId = profile?.fpl_team_id ?? null;
-  const gameweeks = (gwRows ?? []) as Gameweek[];
-  const teams = (teamRows ?? []) as Team[];
-  const players = (playerRows ?? []) as ScoutPlayer[];
+  if (gameweekRes.error || teamRes.error || playerRes.error) throw new Error("Scout data could not load");
+  const gameweeks = (gameweekRes.data ?? []) as Gameweek[];
+  const teams = (teamRes.data ?? []) as Team[];
+  const players = (playerRes.data ?? []) as ScoutPlayer[];
   const stats = new Map(((statsRes.data ?? []) as PlayerStats[]).map((s) => [s.player_id, s]));
   const statsReady = !statsRes.error && stats.size > 0;
 
   const next = gameweeks.find((g) => g.is_next) ?? gameweeks.find((g) => !g.finished) ?? null;
   const ahead = next ? gameweeks.filter((g) => g.id >= next.id).slice(0, 6).map((g) => g.id) : [];
   const played = gameweeks.filter((g) => g.finished).length;
-  const { data: fixtureRows } = ahead.length
+  const fixtureRes = ahead.length
     ? await supabase
         .from("fixtures")
         .select("id,gameweek_id,home_team_id,away_team_id,home_difficulty,away_difficulty,kickoff_time")
         .in("gameweek_id", ahead)
-    : { data: [] };
-  const fixtures = (fixtureRows ?? []) as Fixture[];
+    : { data: [], error: null };
+  const fixtures = (fixtureRes.data ?? []) as Fixture[];
   const ticker = fixtureTicker(teams, fixtures, ahead.slice(0, params.weeks));
   const nextThree = new Map(fixtureTicker(teams, fixtures, ahead.slice(0, 3)).map((r) => [r.team.id, r.weeks]));
   const shortName = new Map(teams.map((t) => [t.id, t.short_name]));
@@ -221,16 +162,16 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
   const rows = players
     .filter((p) => !params.pos || p.position === params.pos)
     .map((p) => statRow(p, stats.get(p.id), params.range, floor));
-  const table = sortStats(rows, params.sort).slice(0, 40);
   const diffs = differentials(rows, leagueOwners, squads, mine).slice(0, 15);
-  const xpFrom = next ? `GW${next.id}-${next.id + 4}` : "";
+  const xpFrom = next ? `GW${next.id}-${Math.min(38, next.id + 4)}` : "";
 
   return (
     <Shell params={params} subtitle={next ? `Looking ahead from ${next.name}` : "The season is over"}>
       {view === "fixtures" && (
+        fixtureRes.error ? <Card><p className="text-sm text-warning">Fixtures couldn’t load. Refresh this page to try again.</p></Card> : !ahead.length ? <Card><p className="text-sm text-muted">No upcoming gameweeks.</p></Card> : !fixtures.length ? <Card><p className="text-sm text-muted">Upcoming fixtures haven’t been published yet.</p></Card> :
         <Card>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-xs text-zinc-500">Kindest run first. Capitals at home, lower case away.</p>
+            <p className="text-xs text-muted">Kindest run first. H: home · A: away.</p>
             <div className="flex gap-1">
               <Chip to={href(params, { weeks: 3 })} on={params.weeks === 3}>
                 3 GWs
@@ -240,9 +181,9 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
               </Chip>
             </div>
           </div>
-          <table className="w-full table-fixed border-separate border-spacing-x-0.5 border-spacing-y-1 text-sm">
+          <div className="overflow-x-auto" role="region" aria-label="Fixture ticker, scroll horizontally" tabIndex={0}><table className={`w-full ${params.weeks === 3 ? "min-w-[300px]" : "min-w-[600px]"} table-fixed border-separate border-spacing-x-0.5 border-spacing-y-1 text-sm`}>
             <thead>
-              <tr className="text-[11px] text-zinc-500">
+              <tr className="text-[11px] text-muted">
                 <th className="w-12 text-left font-medium">Club</th>
                 {ahead.slice(0, params.weeks).map((g) => (
                   <th key={g} className="font-medium">
@@ -266,10 +207,11 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
                     <td key={i} className="align-middle">
                       {cells.length === 0 ? (
                         <span className="block rounded text-center text-[11px] leading-5 text-zinc-400 ring-1 ring-zinc-200 ring-inset dark:ring-zinc-800">
-                          –
+                          Blank
                         </span>
                       ) : (
                         <div className="flex flex-col gap-0.5">
+                          {cells.length > 1 && <span className="text-center text-[10px] text-muted">{cells.length === 2 ? "Double" : `${cells.length} fixtures`}</span>}
                           {cells.map((c, j) => (
                             <FixtureChip key={j} cell={c} compact={cells.length > 1} />
                           ))}
@@ -280,15 +222,15 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
                 </tr>
               ))}
             </tbody>
-          </table>
-          <p className="mt-3 text-xs text-zinc-500">
+          </table></div>
+          <p className="mt-3 text-xs text-muted">
             Colours are FPL&apos;s fixture difficulty (dark green easiest, dark red hardest). Stacked fixtures are a double
-            gameweek, a dash is a blank. Green numbers: players you own at that club.
+            gameweek, “Blank” means no fixture. Difficulty runs from 1 (easiest) to 5 (hardest). Green numbers: players you own at that club.
           </p>
         </Card>
       )}
 
-      {view !== "fixtures" && (
+      {view === "differentials" && (
         <div className="flex gap-1 overflow-x-auto pb-1">
           {POS_SHORT.map((label, pos) => (
             <Chip key={label} to={href(params, { pos })} on={params.pos === pos}>
@@ -298,118 +240,52 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
         </div>
       )}
 
-      {view !== "fixtures" && !statsReady && (
+      {view === "differentials" && !statsReady && (
         <Card>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Player stats appear after the next update (the fetch runs every 3 hours).
+            Player statistics are unavailable. Try again later or use Players to search the directory.
           </p>
         </Card>
       )}
 
-      {view === "stats" && statsReady && (
-        <>
-          <div className="flex flex-wrap gap-1">
-            {SORTS.map((s) => (
-              <Chip key={s} to={href(params, { sort: s })} on={params.sort === s}>
-                {SORT_LABELS[s]}
-              </Chip>
-            ))}
-            <span className="mx-1 self-center text-zinc-300 dark:text-zinc-700">|</span>
-            <Chip to={href(params, { range: "season" })} on={params.range === "season"}>
-              Season
-            </Chip>
-            <Chip to={href(params, { range: "recent" })} on={params.range === "recent"}>
-              Last 6
-            </Chip>
-          </div>
-          <Card>
-            <div className="-mx-4 overflow-x-auto px-4">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] text-zinc-500">
-                    <th className="sticky left-0 bg-white pb-2 font-medium dark:bg-[#0a0a0a]">Player</th>
-                    <th className="pb-2 text-right font-medium" title={`Model expected points, ${xpFrom}`}>
-                      xP 5
-                    </th>
-                    <th className="pb-2 text-right font-medium">xGI/90</th>
-                    <th className="pb-2 text-right font-medium">xG</th>
-                    <th className="pb-2 text-right font-medium">xA</th>
-                    <th className="pb-2 text-right font-medium" title="Defensive contributions per 90">
-                      DC/90
-                    </th>
-                    <th className="pb-2 text-right font-medium">Mins</th>
-                    <th className="pb-2 text-right font-medium">Pts</th>
-                    <th className="pb-2 text-right font-medium">Own</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                  {table.map((r) => (
-                    <tr key={r.player.id} className={mine.has(r.player.id) ? "text-emerald-800 dark:text-emerald-300" : ""}>
-                      <td className="sticky left-0 max-w-36 bg-white py-1.5 pr-2 dark:bg-[#0a0a0a]">
-                        <PlayerLink id={r.player.id} className="block max-w-full truncate font-medium">
-                          {r.player.web_name}
-                        </PlayerLink>
-                        <div className="truncate text-[11px] text-zinc-500">
-                          {shortName.get(r.player.team_id)} · {POSITIONS[r.player.position]} · {formatPrice(r.player.now_cost)}
-                          {r.player.status !== "a" ? " · ⚠" : ""}
-                        </div>
-                      </td>
-                      <td className="text-right font-semibold tabular-nums">{r.xp5?.toFixed(1) ?? "-"}</td>
-                      <td className="text-right tabular-nums">{r.xgi90?.toFixed(2) ?? "-"}</td>
-                      <td className="text-right tabular-nums">{r.xg.toFixed(1)}</td>
-                      <td className="text-right tabular-nums">{r.xa.toFixed(1)}</td>
-                      <td className="text-right tabular-nums">{r.dc90?.toFixed(1) ?? "-"}</td>
-                      <td className="text-right tabular-nums text-zinc-500">{r.minutes}</td>
-                      <td className="text-right tabular-nums">{r.points}</td>
-                      <td className="text-right tabular-nums text-zinc-500">{r.player.selected_by_percent ?? "-"}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-3 text-xs text-zinc-500">
-              xP 5: the model&apos;s expected points over {xpFrom}. Per-90 numbers need {floor}+ minutes.{" "}
-              {params.range === "recent" ? "Last 6 covers the six most recent gameweeks." : "Season totals so far."} Your
-              players are in green.
-            </p>
-          </Card>
-        </>
-      )}
+      {(view === "players" || view === "stats") && <ScoutPlayers players={players} stats={Array.from(stats.values())} teams={teams} mine={Array.from(mine)} played={played} xpFrom={xpFrom} statsReady={statsReady} />}
 
       {view === "differentials" && statsReady && (
+        !myTeamId ? <Card><h2 className="section-title">Link your team for differentials</h2><p className="mt-2 text-sm text-muted">Raptor needs your squad to exclude players you already own.</p><Link href="/account" className="text-link mt-3 inline-flex min-h-11 items-center text-sm">Go to Account</Link></Card> : mine.size !== 15 ? <Card><h2 className="section-title">Your latest squad isn’t available</h2><p className="mt-2 text-sm text-muted">Differentials need a complete squad so your own players can be excluded. Try again after the next data update.</p></Card> :
         <Card>
-          <p className="mb-3 text-xs text-zinc-500">
+          <p className="mb-3 text-xs text-muted">
             Under 10% owned overall,{" "}
             {squads
               ? Math.floor(squads * 0.2) === 0
                 ? `in none of the other ${squads} squads in ${leagueName ?? "your league"}`
                 : `in at most ${Math.floor(squads * 0.2)} of the other ${squads} squads in ${leagueName ?? "your league"}`
-              : "not in your league's squads"}{" "}
+              : "league ownership unavailable (overall ownership only)"}{" "}
             and not in yours, ranked by the model&apos;s next five gameweeks.
           </p>
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+          {!diffs.length && <p className="py-5 text-sm text-muted">No players match these differential criteria.</p>}
+          <ul className="divide-y divide-line dark:divide-line">
             {diffs.map((d) => (
               <li key={d.row.player.id} className="flex items-center gap-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <PlayerLink id={d.row.player.id} className="block max-w-full truncate font-medium">
                     {d.row.player.web_name}
                   </PlayerLink>
-                  <div className="truncate text-xs text-zinc-500">
+                  <div className="truncate text-xs text-muted">
                     {shortName.get(d.row.player.team_id)} · {POSITIONS[d.row.player.position]} ·{" "}
                     {formatPrice(d.row.player.now_cost)} · {d.row.player.selected_by_percent ?? 0}%
                     {squads ? (d.owners ? ` · ${d.owners} rival${d.owners > 1 ? "s" : ""}` : " · no rivals") : ""}
                   </div>
-                  <div className="mt-1 grid w-36 grid-cols-3 gap-0.5">
+                  <div className="mt-2 grid max-w-64 grid-cols-3 gap-1">
                     {(nextThree.get(d.row.player.team_id) ?? []).map((cells, i) =>
-                      cells.length ? (
-                        <div key={i} className="flex flex-col gap-0.5">
+                      fixtureRes.error ? <span key={i} className="text-xs text-muted">Unavailable</span> : cells.length ? (
+                        <div key={i} className="flex flex-col gap-0.5"><span className="text-center text-[10px] text-muted">GW{ahead[i]}{cells.length > 1 ? " · Double" : ""}</span>
                           {cells.map((c, j) => (
                             <FixtureChip key={j} cell={c} compact />
                           ))}
                         </div>
                       ) : (
                         <span key={i} className="block rounded text-center text-[10px] leading-5 text-zinc-400 ring-1 ring-zinc-200 ring-inset dark:ring-zinc-800">
-                          –
+                          Blank
                         </span>
                       ),
                     )}
@@ -417,7 +293,7 @@ export default async function ScoutPage({ searchParams }: PageProps<"/scout">) {
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-semibold tabular-nums">{d.row.xp5?.toFixed(1) ?? "-"}</div>
-                  <div className="text-[11px] text-zinc-500">xP {xpFrom}</div>
+                  <div className="text-[11px] text-muted">xP {xpFrom}</div>
                 </div>
               </li>
             ))}

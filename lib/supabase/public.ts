@@ -10,7 +10,7 @@ import { supabaseEnv } from "@/lib/env";
  * can read. The secret key is only ever used by the jobs in GitHub Actions.
  *
  * Returns null until the environment variables are set, so the app still
- * builds and shows setup steps instead of crashing.
+ * builds and can show an unavailable state instead of crashing.
  */
 export function getSupabase(): SupabaseClient | null {
   const env = supabaseEnv();

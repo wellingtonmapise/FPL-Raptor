@@ -2,47 +2,47 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ordinal } from "@/lib/league";
+import { leagueHref, leagueView, type FollowedLeague } from "@/lib/leagueView";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Leagues · FPL Raptor" };
 
-type Row = { league_id: number; rank: number | null; leagues: { name: string } | null };
-
-export default async function LeaguesPage() {
+export default async function LeaguesPage({ searchParams }: PageProps<"/league">) {
+  const sp = await searchParams;
+  const view = leagueView(typeof sp.view === "string" ? sp.view : null);
   const supabase = await createClient();
   const userId = await currentUserId(supabase);
-  if (!userId) redirect("/login?next=/league");
+  if (!userId) redirect(`/login?next=${encodeURIComponent(`/league${view === "overview" ? "" : `?view=${view}`}`)}`);
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("fpl_team_id")
     .eq("user_id", userId)
     .maybeSingle<{ fpl_team_id: number | null }>();
+  if (profileError) throw new Error("League profile could not load");
   if (!profile?.fpl_team_id) redirect("/onboarding");
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("league_members")
     .select("league_id,rank,leagues(name)")
     .eq("team_id", profile.fpl_team_id);
-  const leagues = (data ?? []) as unknown as Row[];
+  if (error) throw new Error("Followed leagues could not load");
+  const leagues = (data ?? []) as unknown as FollowedLeague[];
 
-  if (leagues.length === 1) redirect(`/league/${leagues[0].league_id}`);
+  if (leagues.length === 1) redirect(leagueHref(leagues[0].league_id,view));
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight">Your leagues</h1>
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8">
+      <header><h1 className="page-title">Your leagues</h1><p className="mt-1 text-sm text-muted">Standings, rivals and the latest recaps.</p></header>
       {leagues.length === 0 ? (
-        <p className="text-zinc-600 dark:text-zinc-400">
-          None of your mini-leagues are followed yet. The app follows the leagues listed in the fetch
-          workflow; ask whoever runs it to add yours.
-        </p>
+        <section className="surface p-5"><h2 className="section-title">No followed leagues yet</h2><p className="mt-2 text-sm leading-relaxed text-muted">Your linked team isn’t in a league followed by Raptor. Ask the app’s owner to follow your league, or check that you linked the right team.</p><Link href="/account" className="text-link mt-3 inline-flex min-h-11 items-center text-sm">Check linked team</Link></section>
       ) : (
-        <ul className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="surface divide-y divide-line">
           {leagues.map((l) => (
             <li key={l.league_id}>
-              <Link href={`/league/${l.league_id}`} className="flex items-center justify-between px-5 py-4">
-                <span className="font-medium">{l.leagues?.name ?? `League ${l.league_id}`}</span>
-                {l.rank && <span className="text-sm text-zinc-500">{ordinal(l.rank)}</span>}
+              <Link href={leagueHref(l.league_id,view)} className="flex min-h-14 items-center justify-between gap-4 px-5 py-4">
+                <span className="min-w-0 break-words font-medium">{l.leagues?.name ?? `League ${l.league_id}`}</span>
+                <span className="shrink-0 text-sm text-muted">{l.rank && l.rank > 0 ? ordinal(l.rank) : "—"} <span aria-hidden>›</span></span>
               </Link>
             </li>
           ))}

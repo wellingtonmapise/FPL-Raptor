@@ -89,9 +89,9 @@ export async function POST(request: Request) {
         send({
           type: "error",
           error: badKey
-            ? "Ask Raptor's AI key isn't working. Check GEMINI_API_KEY in Vercel."
+            ? "Ask Raptor is temporarily unavailable. Please try again later."
             : busy
-              ? "Raptor's swamped right now (Google's free AI is busy). Try again in a minute."
+              ? "Raptor is busy right now. Try again in a minute."
               : "Raptor lost his train of thought. Try asking again.",
           code: badKey ? "not_set_up" : busy ? "busy" : "failed",
         });

@@ -40,18 +40,18 @@ export default function ViewToggle({
     <section>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-semibold">{title}</h2>
-          {note && <p className="truncate text-xs text-zinc-500">{note}</p>}
+          <h2 className="section-title">{title}</h2>
+          {note && <p className="text-xs text-muted">{note}</p>}
         </div>
-        <div className="flex shrink-0 rounded-lg bg-zinc-100 p-0.5 text-sm dark:bg-zinc-900" role="group" aria-label="Show as">
+        <div className="flex shrink-0 rounded-xl bg-surface-muted p-1 text-xs" role="group" aria-label="Squad view">
           {(["pitch", "list"] as const).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => choose(v)}
               aria-pressed={view === v}
-              className={`rounded-md px-3 py-1 font-medium capitalize ${
-                view === v ? "bg-white shadow-sm dark:bg-zinc-800" : "text-zinc-500"
+              className={`min-h-9 rounded-lg px-3 font-medium capitalize ${
+                view === v ? "bg-surface shadow-sm" : "text-muted"
               }`}
             >
               {v}

@@ -4,13 +4,19 @@ import type { SavedDraft } from "@/app/planner/actions";
 import type { TeamFixtures } from "@/components/DraftPlanner";
 import { movesFromPlan, type Chip, type DraftBase, type DraftPlayer, type Move } from "@/lib/draft";
 import { getPicks } from "@/lib/fplApi";
-import type { TransferPlanRow } from "@/lib/plan";
+import { gameweekRange, type TransferPlanRow } from "@/lib/plan";
+import { draftStorageKey, type PredictionCoverage } from "@/lib/plannerView";
 import type { createClient } from "@/lib/supabase/server";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 type PlanExtras = { squad?: { id: number; sell: number }[]; chips_left?: { chip: Chip; from: number; expires: number }[] };
 
 export type DraftData = {
+  storageKey: string;
+  predictionCoverage: PredictionCoverage;
+  notes: string[];
+  botRange: string | null;
+  fixturesAvailable: boolean;
   base: DraftBase;
   players: DraftPlayer[];
   fixtures: TeamFixtures;
@@ -27,7 +33,7 @@ export async function loadDraftData(
   userId: string,
   plan: TransferPlanRow | null,
 ): Promise<{ ok: true; data: DraftData } | { ok: false; reason: string }> {
-  const [{ data: profile }, { data: gameweekRows }, { data: teamRows }, { data: playerRows }] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: gameweekRows, error: gameweeksError }, { data: teamRows }, { data: playerRows, error: playersError }] = await Promise.all([
     supabase.from("profiles").select("fpl_team_id").eq("user_id", userId).maybeSingle<{ fpl_team_id: number | null }>(),
     supabase.from("gameweeks").select("id,deadline_time,is_current").order("id"),
     supabase.from("teams").select("id,short_name"),
@@ -36,6 +42,9 @@ export async function loadDraftData(
       .select("id,web_name,team_id,position,now_cost,status,chance_of_playing_next_round,selected_by_percent")
       .limit(PAGE),
   ]);
+  if (profileError) return { ok: false, reason: "Your team link couldn’t load. Try again in a moment." };
+  if (gameweeksError) return { ok: false, reason: "Gameweek data couldn’t load. Try again in a moment." };
+  if (playersError) return { ok: false, reason: "Player data couldn’t load. Try again in a moment." };
   const teamId = profile?.fpl_team_id;
   if (!teamId) return { ok: false, reason: "Link your FPL team first." };
   const gameweeks = (gameweekRows ?? []) as { id: number; deadline_time: string; is_current: boolean }[];
@@ -107,8 +116,14 @@ export async function loadDraftData(
       owned: p.selected_by_percent == null ? null : Number(p.selected_by_percent),
       xp: xp.get(p.id) ?? ahead.map(() => 0),
     }));
+  if (squad.some((id) => !players.some((player) => player.id === id))) return { ok: false, reason: "Some squad details couldn’t load. Try again in a moment." };
+  const predictionCoverage: PredictionCoverage = {};
+  for (const row of xpRows) if (row.expected_points != null && Number.isFinite(Number(row.expected_points)) && stamp.get(`${row.player_id}:${row.gameweek_id}`) === row.created_at) {
+    const weeks = predictionCoverage[row.player_id] ??= [];
+    if (!weeks.includes(row.gameweek_id)) weeks.push(row.gameweek_id);
+  }
 
-  const { data: fixtureRows } = await supabase
+  const { data: fixtureRows, error: fixturesError } = await supabase
     .from("fixtures")
     .select("gameweek_id,home_team_id,away_team_id,home_difficulty,away_difficulty,kickoff_time")
     .in("gameweek_id", ahead)
@@ -125,9 +140,11 @@ export async function loadDraftData(
   }
 
   // Bank, free transfers, selling prices and chips come from the latest plan (worked out from your FPL history).
-  const extras = (plan?.plan ?? {}) as PlanExtras;
   const fresh = plan && plan.from_gameweek === ahead[0];
-  let bank = plan?.bank ?? null;
+  const extras = (fresh ? plan.plan : {}) as PlanExtras;
+  const notes: string[] = [];
+  if (fixturesError) notes.push("Upcoming fixtures couldn’t load; fixture labels are unavailable.");
+  let bank = fresh ? plan.bank : null;
   if (bank === null && current) {
     const { data: entry } = await supabase
       .from("entry_gameweeks")
@@ -135,8 +152,11 @@ export async function loadDraftData(
       .eq("team_id", teamId)
       .eq("gameweek_id", current.id)
       .maybeSingle<{ bank: number | null }>();
-    bank = entry?.bank ?? 0;
+    bank = entry?.bank ?? null;
   }
+  if (!fresh) notes.push("Free transfers are estimated as 1 until a current plan is available. Selling prices use current prices. Chip availability is not known yet.");
+  if (bank === null) notes.push("Bank is unavailable, so this draft assumes £0.0m.");
+  else if (!fresh) notes.push("Bank uses your last-deadline balance; transfers since then are not visible.");
   const base: DraftBase = {
     gameweeks: ahead,
     squad,
@@ -153,6 +173,11 @@ export async function loadDraftData(
   return {
     ok: true,
     data: {
+      storageKey: draftStorageKey(userId, teamId, ahead[0]),
+      predictionCoverage,
+      notes,
+      botRange: fresh ? gameweekRange(plan) : null,
+      fixturesAvailable: !fixturesError,
       base,
       players,
       fixtures,

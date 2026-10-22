@@ -22,12 +22,12 @@ function countdown(totalSeconds: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export default function Countdown({ deadline }: { deadline: string }) {
+export default function Countdown({ deadline, compact = false }: { deadline: string; compact?: boolean }) {
   const now = useSyncExternalStore(subscribe, nowInSeconds, serverNow);
   const deadlineSeconds = Math.floor(Date.parse(deadline) / 1000);
 
   if (now === null) {
-    return <p className="mt-3 h-14 text-zinc-500">&nbsp;</p>;
+    return <div className={compact ? "h-11" : "mt-3 h-14"} aria-label="Loading deadline" />;
   }
 
   const left = deadlineSeconds - now;
@@ -40,11 +40,11 @@ export default function Countdown({ deadline }: { deadline: string }) {
   });
 
   return (
-    <div className="mt-3">
-      <p className="text-4xl font-semibold tabular-nums tracking-tight">
+    <div className={compact ? "" : "mt-3"}>
+      <p className={`font-semibold tabular-nums tracking-tight ${compact ? "text-lg" : "text-4xl"}`}>
         {left > 0 ? countdown(left) : "Deadline passed"}
       </p>
-      <p className="mt-1 text-zinc-500 dark:text-zinc-400">{local} your time</p>
+      <p className={compact ? "text-xs text-muted" : "mt-1 text-sm text-muted"}>{local} your time</p>
     </div>
   );
 }

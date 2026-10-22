@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   viewportFit: "cover", // lets the phone tab bar sit above the iPhone home indicator
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f7f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#101612" },
   ],
 };
 
@@ -30,9 +30,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:pb-0">
+      <body className="min-h-full flex flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <SiteHeader />
-        <PlayerSheetProvider>{children}</PlayerSheetProvider>
+        <PlayerSheetProvider>
+          <div id="main-content" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">{children}</div>
+        </PlayerSheetProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

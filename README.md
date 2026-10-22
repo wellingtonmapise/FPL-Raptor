@@ -8,7 +8,7 @@ Built: the database and a scheduled job that pulls FPL data into it, sign-in, My
 
 ```
 FPL-Raptor/
-├── app/                     Next.js pages: / (deadline), /login, /onboarding, /me (My gameweek), /live, /planner, /scout, /league, /notifications
+├── app/                     Next.js pages: / (welcome + deadline), /login, /onboarding, /account, /me (Team), /live, /planner, /scout, /league, /notifications
 ├── components/              Pitch, shirts, player card, countdown, squad list, header and tab bar, install help
 ├── public/                  sw.js (shows notifications) and app icons
 ├── lib/                     Supabase clients, FPL helpers, squad, league, live scoring, Scout, pitch and player-card logic (+ Vitest tests)
@@ -57,6 +57,8 @@ From then on it runs every 3 hours on its own. To follow more leagues, add their
 1. At [vercel.com](https://vercel.com), **Add New → Project** and import this repo. The defaults are right.
 2. Under **Environment Variables**, add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 3. Deploy. The home page shows the next deadline once the first fetch has run.
+
+**Google sign-in (optional):** configure the Google provider and callback URLs in Supabase/Google Cloud, then set `GOOGLE_AUTH_ENABLED=true` and `APP_URL` to this app's origin. Follow **[docs/AUTH_SETUP.md](docs/AUTH_SETUP.md)** for setup, existing-account linking, and the checks required before rollout. Google sign-in helps new users find and confirm their team in followed leagues; it does not supply an FPL team ID. Email sign-in and the Points-link fallback remain available.
 
 ### 4. Push notifications
 
@@ -309,13 +311,33 @@ Things worth knowing about FPL's data:
 - **Fetch shows `skipped`:** FPL was down or mid-update (common around deadlines). The next run picks it up.
 - **FPL returns 403 to GitHub Actions:** FPL occasionally blocks cloud servers. Run the job from your laptop to confirm the code works; if the block persists, the fetch can move to another scheduler.
 - **"Account created, but Supabase is waiting for email confirmation":** turn off "Confirm email" (Setup, step 1.4). Accounts created before that can be confirmed by hand in **Authentication → Users**.
-- **"Send a test notification" says VAPID_PRIVATE_KEY is missing:** add it in Vercel (Setup, step 4) and redeploy.
+- **"Send a test notification" says tests are temporarily unavailable:** check that `VAPID_PRIVATE_KEY` is set in Vercel (Setup, step 4), then redeploy after correcting it.
 - **Send alerts shows "Push not set up":** add the `VAPID_PRIVATE_KEY` repository secret on GitHub.
 - **No notifications on iPhone:** the app must be opened from the Home Screen icon (not a Safari tab) when you turn notifications on, and notifications must be allowed in Settings → Notifications → FPL Raptor.
 - **Scheduled runs stopped:** GitHub pauses schedules in public repos after 60 days without a commit. Push anything, or re-enable it under Actions.
 
-## What's next
+## Navigation and UI review
 
-All seven phases of the plan are done. Ideas from here: a "what if" mode on the Planner to test your
-own transfers, injury news in the backtest (so tuning sees what managers see), a model that
-discounts its own favourites (to fix the optimism the backtest found), and whatever the league asks for.
+The five main tabs are **Team**, **Live**, **Planner**, **Scout** and **League**. Account contains team linking, sign-in options, notifications and install help.
+
+- Team leads with the deadline, availability and squad, with pitch/list views and grouped recommendations.
+- Live separates your players, standings and matches.
+- Planner separates the suggested plan from Build your own, with named drafts and reviewed scenario imports.
+- Scout starts with player search; detailed stats, fixtures, differentials and Ask Raptor remain available.
+- League starts with standings and rival context; Insights and Recap have their own views. Existing recap notification links are preserved.
+
+The UI work and its evidence are tracked in **[docs/UI_REFACTOR_PLAN.md](docs/UI_REFACTOR_PLAN.md)**. The [final feature inventory and release review](docs/UI_PHASE_7_REVIEW.md) maps preserved features to their destinations. Local browser checks use synthetic service stand-ins. Physical iPhone/PWA, real native sharing/push delivery and remaining provider/account-policy edge cases must be reviewed separately before release.
+
+Run the app checks with:
+
+```sh
+npm run lint
+npm test
+npm run build
+```
+
+This development environment has a known Turbopack worker/socket permission failure. The production fallback used for local verification is `npm run build -- --webpack`; it includes TypeScript and page generation.
+
+## Future work
+
+The manual planner already supports transfer, captain, swap and chip scenarios. Future model work could add injury news to backtests and reduce the optimism in selected players. Keep those changes separate from this UI refactor and validate them with the season replay.

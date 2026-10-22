@@ -1,21 +1,51 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --background: #f6f7f5;
+  --foreground: #1c2822;
+  --surface: #ffffff;
+  --surface-muted: #edf1ed;
+  --line: #dfe5df;
+  --muted: #626e66;
+  --accent: #176b4a;
+  --accent-soft: #e5f2e9;
+  --warning: #805013;
+  --warning-soft: #fff5df;
+  --radius-panel: 1rem;
+  --radius-control: 0.625rem;
+  --space-section: 1.5rem;
+  --motion-fast: 160ms;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+    --background: #101612;
+    --foreground: #edf2ed;
+    --surface: #18201b;
+    --surface-muted: #212d25;
+    --line: #324037;
+    --muted: #a5b2a8;
+    --accent: #8edbb0;
+    --accent-soft: #203e2d;
+    --warning: #f3cd83;
+    --warning-soft: #342b1b;
   }
 }
 
@@ -23,6 +53,85 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  :where(a, button, input, select, textarea, summary):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  button:not(:disabled), summary { cursor: pointer; }
+}
+
+@layer components {
+  .surface {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+  }
+  .page-title { font-size: 1.5rem; font-weight: 650; line-height: 1.2; letter-spacing: -0.035em; }
+  .section-title { font-size: 1rem; font-weight: 650; line-height: 1.4; letter-spacing: -0.015em; }
+  .button-primary, .button-secondary {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-control);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color var(--motion-fast);
+  }
+  .button-primary { background: var(--accent); color: var(--surface); }
+  .button-primary:hover { filter: brightness(0.92); }
+  .button-secondary { border: 1px solid var(--line); background: var(--surface); }
+  .button-secondary:hover { background: var(--surface-muted); }
+  .button-primary:disabled, .button-secondary:disabled { cursor: default; opacity: 0.5; }
+  .form-field {
+    display: block;
+    min-height: 2.75rem;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--background);
+    padding: 0.625rem 0.75rem;
+    color: var(--foreground);
+    font-size: 1rem;
+  }
+  .text-link { color: var(--accent); font-weight: 500; text-underline-offset: 4px; }
+  .text-link:hover { text-decoration: underline; }
+  .disclosure > summary { list-style: none; }
+  .disclosure > summary::-webkit-details-marker { display: none; }
+  .disclosure > summary .disclosure-arrow { transition: transform var(--motion-fast); }
+  .disclosure[open] > summary .disclosure-arrow { transform: rotate(180deg); }
+}
+
+/* Native dialogs contain focus and make the rest of the page inert. */
+.app-sheet {
+  position: fixed;
+  inset: auto 0 0;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 30rem;
+  max-height: min(88dvh, calc(100dvh - max(1rem, env(safe-area-inset-top))));
+  padding: 0 0 env(safe-area-inset-bottom);
+  border: 1px solid var(--line);
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: var(--surface);
+  color: var(--foreground);
+  overflow: hidden;
+  box-shadow: 0 24px 80px #0003;
+}
+.app-sheet[open] { display: flex; flex-direction: column; }
+.app-sheet::backdrop { background: #08150e80; }
+@media (min-width: 640px) {
+  .app-sheet { inset: 0; margin: auto; max-height: min(88dvh, calc(100dvh - 3rem)); border-radius: 1.5rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-sheet[open] { animation: sheet-up 180ms ease-out; }
+  .app-sheet[open]::backdrop { animation: fade-in 160ms ease-out; }
 }
 
 @keyframes sheet-up {
@@ -43,7 +152,7 @@ body {
   }
 }
 
-/* Ask Raptor: a gentle bob while he thinks, and typing dots. */
+/* Ask Raptor: a gentle bob while he thinks. */
 @keyframes raptor-bob {
   0%,
   100% {
@@ -54,19 +163,19 @@ body {
   }
 }
 
-@keyframes dot-pulse {
-  0%,
-  80%,
-  100% {
-    opacity: 0.25;
-  }
-  40% {
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0ms !important; }
   .motion-safe-bob {
     animation: none !important;
   }
+}
+/* Keep the composer inside a bounded conversation above the mobile tab bar.
+   dvh follows browser chrome and keyboards that resize the layout viewport. */
+.ask-panel {
+  height: var(--ask-keyboard-height, calc(100dvh - 19rem - env(safe-area-inset-bottom)));
+  min-height: min(22rem, var(--ask-keyboard-height, 22rem));
+  max-height: 52rem;
+}
+@media (min-width: 768px) {
+  .ask-panel { height: var(--ask-keyboard-height, calc(100dvh - 16rem)); }
 }

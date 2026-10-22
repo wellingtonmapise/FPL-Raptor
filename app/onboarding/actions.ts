@@ -1,9 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { getEntry } from "@/lib/fplApi";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 import { parseTeamId } from "@/lib/teamId";
+import { safeNext, teamLinkedDestination } from "@/lib/auth";
 
 export type OnboardingState = { error?: string };
 
@@ -15,16 +17,16 @@ export async function saveTeam(_prev: OnboardingState, formData: FormData): Prom
 
   const supabase = await createClient();
   const userId = await currentUserId(supabase);
-  if (!userId) redirect("/login?next=/onboarding");
+  const next = safeNext(formData.get("next"));
+  if (!userId) redirect(`/login?${new URLSearchParams({ next: `/onboarding?${new URLSearchParams({ next })}` })}`);
 
-  // Check the team exists. If FPL is down, save anyway: the name fills in later.
+  // Keep the current profile untouched if the supplied team cannot be checked.
   const entry = await getEntry(teamId);
   if (!entry.ok && entry.reason === "not-found") {
     return { error: `There's no FPL team with ID ${teamId}. Double-check the number.` };
   }
-  const displayName = entry.ok
-    ? `${entry.data.player_first_name} ${entry.data.player_last_name}`.trim()
-    : null;
+  if (!entry.ok) return { error: "FPL isn't responding, so we couldn't check this team. Please try again shortly." };
+  const displayName = `${entry.data.player_first_name} ${entry.data.player_last_name}`.trim();
 
   const { error } = await supabase
     .from("profiles")
@@ -34,8 +36,9 @@ export async function saveTeam(_prev: OnboardingState, formData: FormData): Prom
     if (error.code === "23505") {
       return { error: "That team is already linked to another account. Sign in with that account instead." };
     }
-    return { error: `Couldn't save your team: ${error.message}` };
+    return { error: "Couldn't save your team. Please try again." };
   }
 
-  redirect("/me");
+  revalidatePath("/", "layout");
+  redirect(teamLinkedDestination(next));
 }

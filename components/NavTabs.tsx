@@ -19,14 +19,14 @@ export default function NavTabs({ variant }: { variant: "top" | "bottom" }) {
 
   if (variant === "top") {
     return (
-      <div className="hidden items-center gap-1 sm:flex">
+      <div className="hidden items-center gap-1 md:flex">
         {TABS.map((t) => (
           <Link
             key={t.href}
             href={t.href}
             aria-current={active(t.href) ? "page" : undefined}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-emerald-50 dark:hover:bg-emerald-950 ${
-              active(t.href) ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-emerald-700 dark:text-emerald-400"
+            className={`flex min-h-11 items-center rounded-lg px-3.5 text-sm font-medium hover:bg-surface-muted ${
+              active(t.href) ? "bg-accent-soft text-accent" : "text-muted"
             }`}
           >
             {t.label}
@@ -39,7 +39,7 @@ export default function NavTabs({ variant }: { variant: "top" | "bottom" }) {
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="mx-auto flex max-w-xl">
         {TABS.map((t) => (
@@ -47,13 +47,13 @@ export default function NavTabs({ variant }: { variant: "top" | "bottom" }) {
             <Link
               href={t.href}
               aria-current={active(t.href) ? "page" : undefined}
-              className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
-                active(t.href) ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-500 dark:text-zinc-400"
+              className={`flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] ${
+                active(t.href) ? "font-semibold text-accent" : "font-medium text-muted"
               }`}
             >
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <span className={`flex h-7 w-12 items-center justify-center rounded-full ${active(t.href) ? "bg-accent-soft" : ""}`}><svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d={t.icon} />
-              </svg>
+              </svg></span>
               {t.label}
             </Link>
           </li>
